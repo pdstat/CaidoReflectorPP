@@ -1,0 +1,35 @@
+{
+  "name": "caidoreflector-plus-plus",
+  "version": "1.0.0",
+  "description": "Advanced reflected parameter detector with scoring, encoded signal analysis, and contextual probes.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/reflector++.ts --outdir final --minify",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://example.com/your/repo.git"
+  },
+  "keywords": ["reflection", "security", "xss", "analysis", "caido"],
+  "author": "",
+  "license": "CC0-1.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@caido/sdk-workflow": "^0.51.1",
+    "@types/bun": "^1.0.12",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.12.7",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.4",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "css-select": "^6.0.0",
+    "he": "^1.2.0",
+    "node-html-parser": "^7.0.1"
+  }
+}
