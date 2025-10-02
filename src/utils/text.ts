@@ -36,3 +36,8 @@ export function encVariants(raw: string): { url: string; html: string; jsUniPiec
   }
   return { url, html, jsUniPieces };
 }
+
+// Count occurrences of each keyword string in given text using findMatches logic.
+export function computeKeywordCounts(text: string, keywords: string[]): number[] {
+  return keywords.map(k => findMatches(text, k).length);
+}

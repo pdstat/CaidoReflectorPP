@@ -108,5 +108,20 @@ describe('query utilities', () => {
       mutateParamValue(spec, param, '999', sdk());
       expect(spec._body).toBe('a=1&b=999');
     });
+
+    test('updates Cookie value when present', () => {
+      const spec = {
+        _cookie: 'sid=abc123; theme=light',
+        getHeader: (name: string) => name === 'Cookie' ? [spec._cookie] : undefined,
+        setHeader: (name: string, v: string) => { if (name === 'Cookie') spec._cookie = v; },
+        getQuery: () => '',
+        setQuery: (_: string) => {},
+        getBody: () => undefined,
+        setBody: (_: string) => {}
+      } as any;
+      const param: RequestParameter = { key: 'sid', value: 'abc123', source: 'Cookie', method: 'GET', code: 200 };
+      mutateParamValue(spec, param, 'NEWSESSION', sdk());
+      expect(spec._cookie).toBe('sid=NEWSESSION; theme=light');
+    });
   });
 });

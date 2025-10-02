@@ -1,7 +1,7 @@
 import { RequestParameter, AnalyzedReflectedParameter as BaseReflectedParameter } from "../core/types.js";
 import { scoreFinding } from "./scoring.js";
 import { enumerateRequestParameters } from "../utils/params.js";
-import { parseQueryString, queryToString } from "../utils/query.js";
+import { sendProbe } from "./bodyReflection/probes.js";
 
 type ReflectedParameter = BaseReflectedParameter;
 
@@ -14,21 +14,17 @@ export async function confirmHeaderReflection(
   const CANARY = `_HDR_CANARY_${Math.random().toString(36).slice(2, 10)}`;
   try {
     const requestSpec = originalRequest.toSpec();
-    if (param.source === "URL") {
-      const queryObj = parseQueryString(requestSpec.getQuery() || "");
-      queryObj[param.key] = CANARY;
-      requestSpec.setQuery(queryToString(queryObj));
-    } else if (param.source.toLowerCase() === "body" && requestSpec.getBody()) {
-      const bodyText = requestSpec.getBody()?.toText();
-      if (bodyText) {
-        // Best effort: treat as form-urlencoded (header reflection confirmation currently limited)
-        const bodyObj = parseQueryString(bodyText);
-        bodyObj[param.key] = CANARY;
-        requestSpec.setBody(queryToString(bodyObj));
+    const probeParams: RequestParameter[] = [
+      {
+        key: param.key,
+        value: CANARY,
+        source: param.source,
+        method: param.method,
+        code: param.code
       }
-    }
-    sdk.console.log(`[Reflector++] Sending header confirmation request for parameter "${param.key}" with canary ${CANARY}`);
-    const result = await sdk.requests.send(requestSpec);
+    ];
+  sdk.console.log(`[Reflector++] Sending header confirmation request for parameter "${param.key}" with canary ${CANARY}`);
+    const result = await sendProbe(sdk, requestSpec, probeParams);
     const confirmed: string[] = [];
     try {
       const newHeaders: Record<string, string | string[]> = (result.response as any).getHeaders ? (result.response as any).getHeaders() : {};

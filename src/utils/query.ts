@@ -22,6 +22,20 @@ export const mutateParamValue = (
   sdk: { console: { log: (msg: string) => void } }
 ) => {
   try {
+    if (param.source === 'Cookie') {
+      const raw = requestSpec.getHeader?.('Cookie')?.join('; ') ?? '';
+      if (!raw) return;
+      const parts = raw.split(';').map((c: string) => c.trim()).filter(Boolean);
+      let mutated = false;
+      const updated = parts.map((p: string) => {
+        const eq = p.indexOf('='); if (eq === -1) return p;
+        const k = p.slice(0, eq).trim();
+        if (k === param.key) { mutated = true; return `${k}=${newValue}`; }
+        return p;
+      });
+      if (mutated) requestSpec.setHeader?.('Cookie', updated.join('; '));
+      return;
+    }
     if (param.source === 'URL') {
       const query = parseQueryString(requestSpec.getQuery());
       if (param.key in query) {

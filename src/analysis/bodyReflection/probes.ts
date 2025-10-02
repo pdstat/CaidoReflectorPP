@@ -1,8 +1,8 @@
 import { RequestParameter } from "../../core/types.js";
-import { randomValue, findMatches } from "../../utils/text.js";
+import { randomValue, findMatches, computeKeywordCounts } from "../../utils/text.js";
 import { buildEndpoint, passesContentTypeGating } from "../../utils/http.js";
 import { errorParamsStore } from "../../stores/errorStore.js";
-import { parseQueryString, queryToString } from "../../utils/query.js";
+import { parseQueryString, queryToString, mutateParamValue } from "../../utils/query.js";
 import { KEY_WORDS } from "../../core/constants.js";
 
 // Lightweight SDK-ish type hints (avoid direct import to skirt type module issues)
@@ -17,33 +17,14 @@ export const sendProbe = async (
   params: RequestParameter[]
 ) => {
   try {
-    for (const param of params) {
-      if (param.source === "URL") {
-        const query = parseQueryString(requestSpec.getQuery());
-        (query as any)[param.key] = param.value ?? "";
-        requestSpec.setQuery(queryToString(query));
-      }
-      if (param.source === "Cookie") {
-        const cookies = requestSpec.getHeader("Cookie")?.join("; ") ?? "";
-        const updatedCookies = cookies.split("; ").map((cookie: string) => {
-          const key = cookie.split("=")[0]?.trim();
-          return key === param.key ? `${key}=${param.value ?? ""}` : cookie;
-        }).join("; ");
-        requestSpec.setHeader("Cookie", updatedCookies);
-      }
-      if (param.source.toLowerCase() === "body" && requestSpec.getBody()) {
-        const body = requestSpec.getBody()?.toText() || "";
-        const query = parseQueryString(body);
-        (query as any)[param.key] = param.value ?? "";
-        requestSpec.setBody(queryToString(query));
-      }
-    }
+    for (const param of params) mutateParamValue(requestSpec, param, param.value ?? "", sdk as any);
     sdk.console.log(`[Reflector++] Sending probe request...`);
     return await sdk.requests.send(requestSpec);
   } catch (e) {
     throw `sendProbe threw error: ${e}`;
   }
 };
+
 
 export const modifyAmbiguousParameters = async (
   sdk: SDKLike,
@@ -59,7 +40,7 @@ export const modifyAmbiguousParameters = async (
 
   const baselineBody = input.response.getBody()?.toText() || "";
   const baselineCode = input.response.getCode?.() ?? input.response.getCode?.() ?? 0;
-  const baselineSig = KEY_WORDS.map(k => findMatches(baselineBody, k).length);
+  const baselineSig = computeKeywordCounts(baselineBody, KEY_WORDS);
 
   const isStableLikeBaseline = (probe: any): boolean => {
     const ctHeader = probe.response.getHeader("Content-Type");
@@ -68,7 +49,7 @@ export const modifyAmbiguousParameters = async (
     const codeEqual = (probe.response.getCode?.() ?? 0) === baselineCode;
     if (!codeEqual) return false;
     const body = probe.response.getBody()?.toText() || "";
-    const sig = KEY_WORDS.map(k => findMatches(body, k).length);
+  const sig = computeKeywordCounts(body, KEY_WORDS);
     for (let i = 0; i < sig.length; i++) if (sig[i] !== baselineSig[i]) return false;
     return true;
   };

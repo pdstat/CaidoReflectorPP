@@ -1,4 +1,4 @@
-import { randomValue, findMatches, encVariants } from '../src/utils/text.js';
+import { randomValue, findMatches, encVariants, computeKeywordCounts } from '../src/utils/text.js';
 
 describe('text utilities', () => {
   describe('randomValue', () => {
@@ -53,6 +53,25 @@ describe('text utilities', () => {
       const { jsUniPieces } = encVariants(s);
       // Each JavaScript iteration yields a full code point (A + 😀)
       expect(jsUniPieces).toEqual(['\\u0041','\\u1F600']);
+    });
+  });
+
+  describe('computeKeywordCounts', () => {
+    test('counts occurrences for multiple distinct keywords', () => {
+      const text = 'alpha beta alpha gamma beta beta';
+      const counts = computeKeywordCounts(text, ['alpha', 'beta', 'gamma', 'delta']);
+      expect(counts).toEqual([2, 3, 1, 0]);
+    });
+
+    test('returns zeros when keywords absent', () => {
+      const text = 'zzz yyy xxx';
+      const counts = computeKeywordCounts(text, ['nope', 'missing']);
+      expect(counts).toEqual([0, 0]);
+    });
+
+    test('empty keyword list returns empty array', () => {
+      const counts = computeKeywordCounts('anything here', []);
+      expect(counts).toEqual([]);
     });
   });
 });

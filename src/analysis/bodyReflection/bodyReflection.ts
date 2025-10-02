@@ -1,7 +1,7 @@
 // Avoid direct typed import (Caido SDK d.ts is not a module under NodeNext); use loose any typing.
 type SDK = any; type HttpInput = any;
 import { AnalyzedReflectedParameter as BaseReflectedParameter } from "../../core/types.js";
-import { findMatches } from "../../utils/text.js";
+import { findMatches, computeKeywordCounts } from "../../utils/text.js";
 import { buildEndpoint } from "../../utils/http.js";
 import { enumerateRequestParameters } from "../../utils/params.js";
 import { KEY_WORDS } from "../../core/constants.js";
@@ -27,7 +27,7 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<
   const payloadGenerator = new PayloadGenerator(bodyText);
   const baselineCode = response.getCode();
   const baselineBody = bodyText;
-  const baselineSig = KEY_WORDS.map(k => findMatches(baselineBody, k).length).join(",");
+  const baselineSig = computeKeywordCounts(baselineBody, KEY_WORDS).join(",");
   const endpoint = buildEndpoint(input.request);
 
   let requestParameters = enumerateRequestParameters(request.toSpec(), sdk, response.getCode());
