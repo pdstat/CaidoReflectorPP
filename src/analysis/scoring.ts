@@ -10,10 +10,43 @@ export type ScoreInputs = {
     stableProbe?: boolean;
 };
 
+// --- Extended scoring result (Suggestions A, C, D) ---
+export type ScoreDelta = { label: string; delta: number; base?: number };
+export type ScoreRationale = {
+    confidence: ScoreDelta[];
+    severity: ScoreDelta[];      // positive contributions
+    penalties: ScoreDelta[];     // negative adjustments & clamp
+};
+export type ScoreCategories = {
+    confidence: 'low' | 'moderate' | 'high' | 'proven';
+    severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+    total: 'weak' | 'likely' | 'strong';
+};
 export type ScoreResult = {
     confidence: number;
     severity: number;
     total: number;  // use as "certainty" for backward compat
+    rationale: ScoreRationale;
+    categories: ScoreCategories;
+};
+
+// Declarative factor tables (Suggestion C)
+export const CONFIDENCE_FACTORS = {
+    base: 30,
+    confirmed: 25,
+    stableProbe: 10,
+    perExtraMatch: 2,
+    perExtraMatchMax: 10,
+    escapedPenalty: -12,
+};
+
+export const SEVERITY_FACTORS = {
+    charSetMultiplier: 0.6,
+    scriptQuoteBonus: 12,
+    scriptTagBonus: 6,
+    escapedPenalty: -18,
+    htmlCommentPenalty: -10,
+    headerFloor: 40,
 };
 
 // --- Escaped/alias handling + context base weights ---
@@ -104,30 +137,88 @@ function charSetScore(chars: string[]): number {
     return Math.min(n, 40);
 }
 
-function confidenceScore(inp: ScoreInputs): number {
-    let c = 30;
-    if (inp.confirmed) c += 25;
-    if (inp.stableProbe) c += 10;
-    if (inp.matchCount && inp.matchCount > 1) c += Math.min(10, inp.matchCount * 2);
-    if (isEscapedContext(inp.context)) c -= 12; // penalty for encoded-only
-    return clamp(c);
+// Confidence with rationale accumulation
+function computeConfidence(inp: ScoreInputs, rationale: ScoreDelta[], penalties: ScoreDelta[]): number {
+    let c = CONFIDENCE_FACTORS.base;
+    rationale.push({ label: 'Base', delta: CONFIDENCE_FACTORS.base });
+    if (inp.confirmed) { c += CONFIDENCE_FACTORS.confirmed; rationale.push({ label: 'Confirmed reflection', delta: CONFIDENCE_FACTORS.confirmed }); }
+    if (inp.stableProbe) { c += CONFIDENCE_FACTORS.stableProbe; rationale.push({ label: 'Stable probe', delta: CONFIDENCE_FACTORS.stableProbe }); }
+    if (inp.matchCount && inp.matchCount > 1) {
+        const extraMatches = Math.min(CONFIDENCE_FACTORS.perExtraMatchMax, inp.matchCount * CONFIDENCE_FACTORS.perExtraMatch);
+        c += extraMatches;
+        rationale.push({ label: 'Multiple matches', delta: extraMatches });
+    }
+    if (isEscapedContext(inp.context)) { c += CONFIDENCE_FACTORS.escapedPenalty; penalties.push({ label: 'Escaped context penalty', delta: CONFIDENCE_FACTORS.escapedPenalty }); }
+    const clamped = clamp(c);
+    if (clamped !== c) penalties.push({ label: 'Clamp applied', delta: clamped - c });
+    return clamped;
 }
 
-function severityScore(inp: ScoreInputs): number {
-    let base = inp.header ? Math.max(40, headerWeight(inp.headerNames)) : contextWeight(inp.context);
-    base += Math.round(charSetScore(inp.allowedChars) * 0.6); // char set contribution
+// Severity with rationale accumulation
+function computeSeverity(inp: ScoreInputs, rationale: ScoreDelta[], penalties: ScoreDelta[]): number {
+    const isHeader = !!inp.header;
+    let base = isHeader ? Math.max(SEVERITY_FACTORS.headerFloor, headerWeight(inp.headerNames)) : contextWeight(inp.context);
+    rationale.push({ label: isHeader ? 'Header base weight' : `Context base (${normalizeContextKey(inp.context)})`, delta: base, base });
+
+    // Char set contribution
+    const rawCharScore = charSetScore(inp.allowedChars);
+    if (rawCharScore > 0) {
+        const contrib = Math.round(rawCharScore * SEVERITY_FACTORS.charSetMultiplier);
+        rationale.push({ label: `Allowed char capability (+${rawCharScore} *${SEVERITY_FACTORS.charSetMultiplier})`, delta: contrib });
+        base += contrib;
+    }
     const ctxKey = normalizeContextKey(inp.context);
-    const isScript = /script/i.test(inp.context) || ctxKey === "js" || ctxKey === "jsInQuote";
-    if (isScript && (inp.allowedChars.includes('"') || inp.allowedChars.includes("'"))) base += 12;
-    if (isScript && inp.allowedChars.includes("<")) base += 6;
-    if (isEscapedContext(inp.context)) base -= 18; // non-breakout contexts
-    if (/htmlcomment/i.test(inp.context)) base -= 10;
-    return clamp(base);
+    const isScript = /script/i.test(inp.context) || ctxKey === 'js' || ctxKey === 'jsInQuote';
+    if (isScript && (inp.allowedChars.includes('"') || inp.allowedChars.includes("'"))) { base += SEVERITY_FACTORS.scriptQuoteBonus; rationale.push({ label: 'Script quote breakout bonus', delta: SEVERITY_FACTORS.scriptQuoteBonus }); }
+    if (isScript && inp.allowedChars.includes('<')) { base += SEVERITY_FACTORS.scriptTagBonus; rationale.push({ label: 'Script < bonus', delta: SEVERITY_FACTORS.scriptTagBonus }); }
+    if (isEscapedContext(inp.context)) { base += SEVERITY_FACTORS.escapedPenalty; penalties.push({ label: 'Escaped context penalty', delta: SEVERITY_FACTORS.escapedPenalty }); }
+    if (/htmlcomment/i.test(inp.context)) { base += SEVERITY_FACTORS.htmlCommentPenalty; penalties.push({ label: 'HTML comment penalty', delta: SEVERITY_FACTORS.htmlCommentPenalty }); }
+    const unclamped = base;
+    const clamped = clamp(base);
+    if (clamped !== unclamped) penalties.push({ label: 'Clamp applied', delta: clamped - unclamped });
+    return clamped;
+}
+
+// Category mapping (Suggestion D)
+function mapConfidenceCategory(v: number): ScoreCategories['confidence'] {
+    if (v >= 70) return 'proven';
+    if (v >= 55) return 'high';
+    if (v >= 35) return 'moderate';
+    return 'low';
+}
+function mapSeverityCategory(v: number): ScoreCategories['severity'] {
+    if (v >= 80) return 'critical';
+    if (v >= 60) return 'high';
+    if (v >= 40) return 'medium';
+    if (v >= 20) return 'low';
+    return 'info';
+}
+function mapTotalCategory(v: number): ScoreCategories['total'] {
+    if (v >= 55) return 'strong';
+    if (v >= 30) return 'likely';
+    return 'weak';
 }
 
 export function scoreFinding(inp: ScoreInputs): ScoreResult {
-    const confidence = confidenceScore(inp);
-    const severity = severityScore(inp);
+    const confidenceRationale: ScoreDelta[] = [];
+    const severityRationale: ScoreDelta[] = [];
+    const penalties: ScoreDelta[] = [];
+
+    const confidence = computeConfidence(inp, confidenceRationale, penalties);
+    const severity = computeSeverity(inp, severityRationale, penalties);
     const total = clamp(Math.round(0.55 * confidence + 0.45 * severity - 0.1 * Math.abs(confidence - severity)));
-    return { confidence, severity, total };
+
+    const categories: ScoreCategories = {
+        confidence: mapConfidenceCategory(confidence),
+        severity: mapSeverityCategory(severity),
+        total: mapTotalCategory(total)
+    };
+
+    return {
+        confidence,
+        severity,
+        total,
+        rationale: { confidence: confidenceRationale, severity: severityRationale, penalties },
+        categories
+    };
 }

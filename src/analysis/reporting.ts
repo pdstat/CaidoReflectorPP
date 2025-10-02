@@ -1,4 +1,5 @@
 import { ReflectedParameter as BaseReflectedParameter } from "../core/types.js";
+import { ScoreResult, ScoreDelta } from "./scoring.js";
 import { mergeEncodedSignals } from "./mergeEncodedSignals.js";
 import { prettyPrintContext } from "./contextMap.js";
 
@@ -13,6 +14,10 @@ export interface ReportReflectedParameter extends BaseReflectedParameter {
   otherContexts?: Record<string, number>; // optional: secondary literal contexts
   headers?: string[];      // for header reflections
   aggressive?: string[];   // allowed characters (literal proven)
+  // Extended scoring (if caller passed full ScoreResult alongside legacy fields)
+  categories?: ScoreResult['categories'];
+  rationale?: ScoreResult['rationale'];
+  modelVersion?: string;
 }
 
 /** Canonicalize internal context identifiers into human readable labels */
@@ -36,22 +41,48 @@ export function generateReport(param: ReportReflectedParameter): string {
   const prettyContext = canonicalizeContext(context);
   const alsoIn = formatOtherContexts(param.otherContexts);
   const count = Array.isArray(matches) ? matches.length : 0;
-  const total = (param as any).score ?? (param as any).certainty;
+  const total = (param as any).score ?? (param as any).certainty; // numeric value
   const conf = param.confidence;
   const sev = param.severity;
-  const scoreParts: string[] = [];
-  if (typeof total === "number") scoreParts.push(`score=${Math.round(total)}%`);
-  if (typeof conf === "number") scoreParts.push(`confidence=${Math.round(conf)}%`);
-  if (typeof sev === "number") scoreParts.push(`severity=${Math.round(sev)}%`);
-  let details = `${name} – reflected ${count} time(s)`;
-  if (prettyContext) details += ` in ${prettyContext}`;
-  if (alsoIn) details += alsoIn;
-  if (headers && headers.length) details += ` in header(s): ${headers.join(", ")}`;
-  if (source) details += ` (source: ${source})`;
-  if (scoreParts.length) details += ` [${scoreParts.join(", ")}]`;
-  details += `\n`;
+  const categories = param.categories;
+  // Compact main line per requirement E
+  // token: 2 reflections | Context: Tag Attribute (encoded) | Score: 71% (strong) [Conf 55% (high), Sev 100% (critical)]
+  let line = `${name}: ${count} reflection${count === 1 ? '' : 's'}`;
+  if (prettyContext) line += ` | Context: ${prettyContext}`;
+  if (alsoIn) line += ` ${alsoIn}`; // retains "; also in ..." text
+  if (headers && headers.length) line += ` | Headers: ${headers.join(', ')}`;
+  if (typeof total === 'number') {
+    const totalPct = Math.round(total);
+    const totalCat = categories?.total ? ` (${categories.total})` : '';
+    line += ` | Score: ${totalPct}%${totalCat}`;
+  }
+  const parts: string[] = [];
+  if (typeof conf === 'number') parts.push(`Conf ${Math.round(conf)}%${categories?.confidence ? ` (${categories.confidence})` : ''}`);
+  if (typeof sev === 'number') parts.push(`Sev ${Math.round(sev)}%${categories?.severity ? ` (${categories.severity})` : ''}`);
+  if (parts.length) line += ` [${parts.join(', ')}]`;
+  if (source) line += ` | Source: ${source}`;
+  if (param.modelVersion) line += ` | Model ${param.modelVersion}`;
+  line += `\n`;
+
+  // Rationale (compact, always shown when available — no verbose toggle implemented)
+  const rat = param.rationale;
+  if (rat) {
+    const fmtGroup = (label: string, arr: ScoreDelta[] | undefined) => {
+      if (!arr || !arr.length) return '';
+      const lines = arr.map(d => {
+        const sign = d.delta >= 0 ? '+' : '';
+        return `    - ${d.label}: ${sign}${d.delta}`;
+      });
+      return `  ${label}:\n${lines.join('\n')}\n`;
+    };
+    line += fmtGroup('Confidence factors', rat.confidence);
+    line += fmtGroup('Severity factors', rat.severity);
+    line += fmtGroup('Penalties / clamps', rat.penalties);
+  }
+
+  let details = line;
   if (aggressive && aggressive.length) {
-    details += `\n  Allowed characters (literal, verified in this context):`;
+    details += `  Allowed characters (literal, verified in this context):`;
     for (const ch of aggressive) {
       const shown = ch === "" ? "<empty>" : JSON.stringify(ch);
       details += `\n    - ${shown}`;

@@ -27,7 +27,7 @@ describe("canonicalizeContext", () => {
 });
 
 describe("generateReport", () => {
-  test("builds detailed report with headers, otherContexts sorting, aggressive chars", () => {
+  test("builds detailed compact report with headers, otherContexts sorting, aggressive chars and rationale", () => {
     const param: any = {
       name: "token",
       matches: [[0,1],[2,3]],
@@ -40,16 +40,26 @@ describe("generateReport", () => {
       confidence: 60.2,
       severity: 70.7,
       certainty: 85.4 // legacy alias
+      // simulate enriched scoring fields
+      ,categories: { confidence: 'high', severity: 'high', total: 'strong' },
+      rationale: { confidence: [{ label: 'Base', delta: 30 }], severity: [{ label: 'Context base (attributeEscaped)', delta: 22 }], penalties: [{ label: 'Escaped context penalty', delta: -18 }] },
+      modelVersion: '1.1.0'
     };
     const out = generateReport(param);
-    // Core pieces
-    expect(out).toContain("token – reflected 2 time(s) in Tag Attribute (encoded)");
+    // Core pieces (new compact format)
+    expect(out).toMatch(/token: 2 reflections \| Context: Tag Attribute \(encoded\)/);
     expect(out).toContain("also in Script ×5, Tag Attribute (quoted) Value ×3, HTML ×1");
-    expect(out).toContain("in header(s): Location, Set-Cookie");
-    expect(out).toContain("(source: Body)");
-    expect(out).toMatch(/score=85%/); // rounded
-    expect(out).toMatch(/confidence=60%/);
-    expect(out).toMatch(/severity=71%/); // rounded 70.7
+    expect(out).toContain("| Headers: Location, Set-Cookie");
+    expect(out).toMatch(/\| Score: 85% \(strong\) \[Conf 60% \(high\), Sev 71% \(high\)\]/);
+    expect(out).toContain("| Source: Body");
+    expect(out).toContain("| Model 1.1.0");
+    // Rationale sections
+    expect(out).toContain('Confidence factors:');
+    expect(out).toContain('Severity factors:');
+    expect(out).toContain('Penalties / clamps:');
+    expect(out).toContain('- Base: +30');
+    expect(out).toContain('- Context base (attributeEscaped): +22');
+    expect(out).toContain('- Escaped context penalty: -18');
     // Aggressive characters formatting: empty shown as <empty>, others JSON encoded
     expect(out).toContain("<empty>");
     expect(out).toContain("\"<\"");
