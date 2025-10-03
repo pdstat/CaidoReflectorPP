@@ -1,4 +1,5 @@
 // src/analysis/scoring.ts (moved from src/scoring.ts)
+import { CONTEXT } from './contextMap.js';
 export type ScoreInputs = {
     confirmed: boolean;
     allowedChars: string[];   // e.g., ['<','"','"']
@@ -51,30 +52,30 @@ export const SEVERITY_FACTORS = {
 // --- Escaped/alias handling + context base weights ---
 const CONTEXT_SEVERITY_BASE: Record<string, number> = {
     // JS contexts
-    js: 80,
-    jsInQuote: 72,
+    [CONTEXT.JS]: 80,
+    [CONTEXT.JS_IN_QUOTE]: 72,
     "Script": 80,            // legacy alias
     "Script String": 72,     // legacy alias
 
     // Event handlers
-    eventHandler: 78,
-    eventHandlerEscaped: 28, // NEW: down-ranked
+    [CONTEXT.EVENT_HANDLER]: 78,
+    [CONTEXT.EVENT_HANDLER_ESCAPED]: 28, // NEW: down-ranked
 
     // Attributes
-    attributeInQuote: 66,
-    attribute: 40,
-    attributeEscaped: 22,    // NEW: down-ranked
+    [CONTEXT.ATTRIBUTE_IN_QUOTE]: 66,
+    [CONTEXT.ATTRIBUTE]: 40,
+    [CONTEXT.ATTRIBUTE_ESCAPED]: 22,    // NEW: down-ranked
     'Tag Attribute (") Value': 66, // legacy alias
     "Tag Attribute (') Value": 66, // legacy alias
 
     // CSS
-    css: 45,
-    cssInQuote: 38,
+    [CONTEXT.CSS]: 45,
+    [CONTEXT.CSS_IN_QUOTE]: 38,
 
     // Markup / other
-    html: 35,
+    [CONTEXT.HTML]: 35,
     HTML: 35,                // legacy alias
-    htmlComment: 20,         // NEW: low signal
+    [CONTEXT.HTML_COMMENT]: 20,         // NEW: low signal
 
     // Headers
     "Response Header": 50,

@@ -3,7 +3,7 @@
 export const isLiteralContext = (ctx: string): boolean => {
   if (!ctx) return false;
   const k = ctx.toLowerCase();
-  if (k.endsWith('escaped')) return false; // attributeEscaped, eventHandlerEscaped
+  if (k.endsWith('escaped')) return false; // escaped variants (attributeEscaped, eventHandlerEscaped)
   if (k.includes('comment')) return false; // htmlComment
   if (k === 'jsonscript') return false;
   return true;

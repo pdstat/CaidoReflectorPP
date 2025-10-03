@@ -27,11 +27,14 @@ export const getTags = (body: string): Tag[] => {
 export const inQuotes = (body: string, start: number, end: number, tag: Tag, quoteChar: string) => {
   let inQuote = false;
   for (let i = tag.start; i < start; i++) {
-    if (body[i] === quoteChar) inQuote = !inQuote;
+    if (body[i] === quoteChar)
+      inQuote = !inQuote;
   }
   if (!inQuote) return false;
   for (let i = start; i < end; i++) {
-    if (body[i] === quoteChar) { inQuote = !inQuote; }
+    if (body[i] === quoteChar) {
+      inQuote = !inQuote;
+    }
   }
   return inQuote; // true only if we never closed before end
 };
@@ -58,15 +61,18 @@ export const getReflectionContext = (
   const classifyInsideTag = (tag: Tag, start: number, end: number): string => {
     const isScript = tag.name === "script";
     const dQuoted = inQuotes(body, start, end, tag, '"');
-    if (dQuoted) return isScript ? CONTEXTS.SCRIPT_DQUOTE : CONTEXTS.TAG_DQUOTE;
+    if (dQuoted)
+      return isScript ? CONTEXTS.SCRIPT_DQUOTE : CONTEXTS.TAG_DQUOTE;
     const sQuoted = inQuotes(body, start, end, tag, "'");
-    if (sQuoted) return isScript ? CONTEXTS.SCRIPT_SQUOTE : CONTEXTS.TAG_SQUOTE;
+    if (sQuoted)
+      return isScript ? CONTEXTS.SCRIPT_SQUOTE : CONTEXTS.TAG_SQUOTE;
     return isScript ? CONTEXTS.SCRIPT_UNQUOTED : CONTEXTS.TAG_UNQUOTED;
   };
 
   for (const [start, end] of matches) {
     const containing = tags.find(t => t.start < start && t.end > end);
-    if (!containing) return CONTEXTS.OUT_OF_TAG;
+    if (!containing)
+      return CONTEXTS.OUT_OF_TAG;
     return classifyInsideTag(containing, start, end);
   }
   return CONTEXTS.FALLBACK; // no matches -> fallback

@@ -1,8 +1,8 @@
 import { RequestParameter } from "../../core/types.js";
-import { randomValue, findMatches, computeKeywordCounts } from "../../utils/text.js";
+import { randomValue, computeKeywordCounts } from "../../utils/text.js";
 import { buildEndpoint, passesContentTypeGating } from "../../utils/http.js";
 import { errorParamsStore } from "../../stores/errorStore.js";
-import { parseQueryString, queryToString, mutateParamValue } from "../../utils/query.js";
+import { mutateParamValue } from "../../utils/query.js";
 import { KEY_WORDS } from "../../core/constants.js";
 
 // Lightweight SDK-ish type hints (avoid direct import to skirt type module issues)
@@ -49,7 +49,7 @@ export const modifyAmbiguousParameters = async (
     const codeEqual = (probe.response.getCode?.() ?? 0) === baselineCode;
     if (!codeEqual) return false;
     const body = probe.response.getBody()?.toText() || "";
-  const sig = computeKeywordCounts(body, KEY_WORDS);
+    const sig = computeKeywordCounts(body, KEY_WORDS);
     for (let i = 0; i < sig.length; i++) if (sig[i] !== baselineSig[i]) return false;
     return true;
   };

@@ -8,6 +8,7 @@ import { AnalyzedReflectedParameter } from "./core/types.js";
 import { generateReport } from "./analysis/reporting.js";
 import { COMMON_ANALYTICS_HOSTS_SET, COMMON_ANALYTICS_ENDPOINTS_SET } from "./core/constants.js";
 import { mergeEncodedSignals } from "./analysis/mergeEncodedSignals.js";
+import { CONTEXT } from "./analysis/contextMap.js";
 import { getEncodedSignals } from "./analysis/encodedSignalsStore.js";
 
 // Use unified analyzed reflected parameter type
@@ -83,14 +84,14 @@ export async function run(
         for (const [name, m] of merged.entries()) {
             // Pick a representative escaped context to score
             let ctx: string;
-            if (m.contexts.has("attributeEscaped")) {
-                ctx = "attributeEscaped";
-            } else if (m.contexts.has("eventHandlerEscaped")) {
-                ctx = "eventHandlerEscaped";
-            } else if (m.contexts.has("jsonEscaped")) {
-                ctx = "jsonEscaped";
+            if (m.contexts.has(CONTEXT.ATTRIBUTE_ESCAPED)) {
+                ctx = CONTEXT.ATTRIBUTE_ESCAPED;
+            } else if (m.contexts.has(CONTEXT.EVENT_HANDLER_ESCAPED)) {
+                ctx = CONTEXT.EVENT_HANDLER_ESCAPED;
+            } else if (m.contexts.has(CONTEXT.JSON_ESCAPED)) {
+                ctx = CONTEXT.JSON_ESCAPED;
             } else {
-                ctx = "html";
+                ctx = CONTEXT.HTML;
             }
 
             // Low severity, unconfirmed (encoded) finding

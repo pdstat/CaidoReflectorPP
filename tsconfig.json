@@ -10,7 +10,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "types": ["jest", "node"],
-    "outDir": "dist"
+  "outDir": "dist",
+  "allowImportingTsExtensions": true
   },
   "include": ["src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "final", "dist"]

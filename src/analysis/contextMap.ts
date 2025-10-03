@@ -10,6 +10,23 @@ export type CanonicalContext =
   | 'jsonEscaped'
   | 'responseHeader';
 
+// Centralized constant references to avoid string literal drift across modules.
+export const CONTEXT = Object.freeze({
+  JS: 'js' as CanonicalContext,
+  JS_IN_QUOTE: 'jsInQuote' as CanonicalContext,
+  CSS: 'css' as CanonicalContext,
+  CSS_IN_QUOTE: 'cssInQuote' as CanonicalContext,
+  EVENT_HANDLER: 'eventHandler' as CanonicalContext,
+  EVENT_HANDLER_ESCAPED: 'eventHandlerEscaped' as CanonicalContext,
+  ATTRIBUTE: 'attribute' as CanonicalContext,
+  ATTRIBUTE_IN_QUOTE: 'attributeInQuote' as CanonicalContext,
+  ATTRIBUTE_ESCAPED: 'attributeEscaped' as CanonicalContext,
+  HTML: 'html' as CanonicalContext,
+  HTML_COMMENT: 'htmlComment' as CanonicalContext,
+  JSON_ESCAPED: 'jsonEscaped' as CanonicalContext,
+  RESPONSE_HEADER: 'responseHeader' as CanonicalContext,
+});
+
 // Alias (input) -> canonical context mapping.
 const ALIASES: Record<string, CanonicalContext> = {
   'script': 'js',
@@ -25,7 +42,9 @@ const ALIASES: Record<string, CanonicalContext> = {
 
 // Accept set for direct canonical names (lowercase form)
 const CANONICAL_SET = new Set<CanonicalContext>([
-  'js','jsInQuote','css','cssInQuote','eventHandler','eventHandlerEscaped','attribute','attributeInQuote','attributeEscaped','html','htmlComment','jsonEscaped','responseHeader'
+  'js','jsInQuote','css','cssInQuote','eventHandler',
+  'eventHandlerEscaped','attribute','attributeInQuote',
+  'attributeEscaped','html','htmlComment','jsonEscaped','responseHeader'
 ]);
 
 export function toCanonical(raw?: string): CanonicalContext | undefined {

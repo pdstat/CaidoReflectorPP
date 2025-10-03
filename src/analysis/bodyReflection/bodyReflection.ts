@@ -19,7 +19,10 @@ interface ReflectedParameter extends BaseReflectedParameter { confidence?: numbe
 
 export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<ReflectedParameter[]> {
   const { request, response } = input;
-  if (!request || !response) { sdk.console.log("[Reflector++] Skipping scan - request or response is missing"); return []; }
+  if (!request || !response) {
+    sdk.console.log("[Reflector++] Skipping scan - request or response is missing");
+    return [];
+  }
 
   sdk.console.log("[Reflector++] Checking parameters for reflection (payload-based)...");
   const bodyText = response.getBody()?.toText() || "";
@@ -38,7 +41,10 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<
   for (const param of requestParameters) {
     if (!param.value) continue;
     const errorParamStore = errorParamsStore.get();
-    if (errorParamStore.paramErrored(endpoint, param)) { sdk.console.log(`[Reflector++] Skipping parameter "${param.key}" due to previous error tracking`); continue; }
+    if (errorParamStore.paramErrored(endpoint, param)) {
+      sdk.console.log(`[Reflector++] Skipping parameter "${param.key}" due to previous error tracking`);
+      continue;
+    }
     sdk.console.log('-------');
     sdk.console.log(`[Reflector++] Checking parameter "${param.key}" (source: ${param.source})`);
 
