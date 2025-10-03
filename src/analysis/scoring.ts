@@ -179,7 +179,6 @@ function computeSeverity(inp: ScoreInputs, rationale: ScoreDelta[], penalties: S
     return clamped;
 }
 
-// Category mapping (Suggestion D)
 function mapConfidenceCategory(v: number): ScoreCategories['confidence'] {
     if (v >= 70) return 'proven';
     if (v >= 55) return 'high';

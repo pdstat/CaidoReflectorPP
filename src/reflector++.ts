@@ -5,7 +5,7 @@ import { checkBodyReflections } from "./analysis/bodyReflection/bodyReflection.j
 import { checkHeaderReflections } from "./analysis/headerReflection.js";
 import { buildEndpoint, passesContentTypeGating } from "./utils/http.js";
 import { AnalyzedReflectedParameter } from "./core/types.js";
-import { generateReport } from "./analysis/reporting.js";
+import { generateReport, buildEncodedSignalsSection } from "./analysis/reporting.js";
 import { COMMON_ANALYTICS_HOSTS_SET, COMMON_ANALYTICS_ENDPOINTS_SET } from "./core/constants.js";
 import { mergeEncodedSignals } from "./analysis/mergeEncodedSignals.js";
 import { CONTEXT } from "./analysis/contextMap.js";
@@ -43,7 +43,7 @@ export async function run(
     //   1. Explicit override on input.config?.mode
     //   2. Environment variable REFLECTOR_MODE
     //   3. Default fallback "strict+signals"
-    const rawMode = (input?.config?.mode || process?.env?.REFLECTOR_MODE || "strict+signals").toString().trim().toLowerCase();
+    const rawMode = "strict+signals";
     const VALID_MODES = new Set(["strict", "strict+signals", "exploratory"]);
     const MODE = VALID_MODES.has(rawMode) ? rawMode : "strict+signals";
     if (!VALID_MODES.has(rawMode)) {
@@ -124,7 +124,7 @@ export async function run(
 
     // Append encoded signal section if enabled
     if ((MODE === "strict+signals" || MODE === "exploratory") && encodedSignals?.length) {
-        const { buildEncodedSignalsSection } = await import("./analysis/reporting.js");
+        // buildEncodedSignalsSection is statically imported above
         details += buildEncodedSignalsSection(encodedSignals);
     }
 

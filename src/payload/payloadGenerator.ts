@@ -22,17 +22,17 @@ const PayloadGenerator = class {
 	}
 
 	// ---------- Utilities ----------
-	private walkNodes(node: Node, cb: (node: Node) => void): void {
+	private _walkNodes(node: Node, cb: (node: Node) => void): void {
 		cb(node);
 		const kids = (node as any).childNodes as any[] | undefined;
 		if (Array.isArray(kids)) {
-			for (const child of kids) this.walkNodes(child, cb);
+			for (const child of kids) this._walkNodes(child, cb);
 		}
 	}
 
-	private containsTextOutsideTags(marker: string, exclude: string[] = ["SCRIPT", "STYLE"]): boolean {
+	private _containsTextOutsideTags(marker: string, exclude: string[] = ["SCRIPT", "STYLE"]): boolean {
 		let found = false;
-		this.walkNodes(this.root as any, (n: Node) => {
+		this._walkNodes(this.root as any, (n: Node) => {
 			if (found) return;
 			const isText =
 				(n as any).nodeType === 3 || (n as any).constructor?.name === "TextNode";
@@ -45,7 +45,7 @@ const PayloadGenerator = class {
 		return found;
 	}
 
-	private htmlEntityDecode(s: string): string {
+	private _htmlEntityDecode(s: string): string {
 		return s
 			.replace(/&lt;/gi, "<")
 			.replace(/&gt;/gi, ">")
@@ -54,7 +54,7 @@ const PayloadGenerator = class {
 			.replace(/&#x([0-9a-f]+);/gi, (_: string, h: string) => String.fromCharCode(parseInt(h, 16)));
 	}
 
-	private jsEscapeDecode(s: string): string {
+	private _jsEscapeDecode(s: string): string {
 		return s
 			// \xNN
 			.replace(/\\x([0-9a-f]{2})/gi, (_: string, h: string) => String.fromCharCode(parseInt(h, 16)))
@@ -65,9 +65,9 @@ const PayloadGenerator = class {
 			.replace(/\\([0-3]?[0-7]{1,2})/g, (_: string, o: string) => String.fromCharCode(parseInt(o, 8)));
 	}
 
-	private uniq<T>(a: T[]): T[] { return Array.from(new Set(a)); }
+	private _uniq<T>(a: T[]): T[] { return Array.from(new Set(a)); }
 
-	private isJsExecutableScriptType(t?: string | null): boolean {
+	private _isJsExecutableScriptType(t?: string | null): boolean {
 		if (!t) return true; // no type => JS by default
 		const v = t.toLowerCase().trim();
 		return (
@@ -79,22 +79,28 @@ const PayloadGenerator = class {
 		);
 	}
 
-	private variantsOf(s: string): string[] {
+	private _variantsOf(s: string): string[] {
 		let urlDec = s;
 		try { urlDec = decodeURIComponent(s); } catch { }
-		const htmlDec = this.htmlEntityDecode(urlDec);
-		const jsDec = this.jsEscapeDecode(urlDec);
-		const htmlJsDec = this.jsEscapeDecode(htmlDec);
-		return this.uniq([s, urlDec, htmlDec, jsDec, htmlJsDec]);
+		const htmlDec = this._htmlEntityDecode(urlDec);
+		const jsDec = this._jsEscapeDecode(urlDec);
+		const htmlJsDec = this._jsEscapeDecode(htmlDec);
+		return this._uniq([s, urlDec, htmlDec, jsDec, htmlJsDec]);
 	}
 
-	private static escRe(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
-	private getRawAttrDetail(el: HTMLElement, name: string): { value: string; quote: '"' | "'" | "" } | null {
+	/**
+	 * Escape a string so it can be safely embedded as a literal inside a RegExp pattern.
+	 */
+	private static _escapeRegexLiteral(s: string): string {
+		return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	}
+
+	private _getRawAttrDetail(el: HTMLElement, name: string): { value: string; quote: '"' | "'" | "" } | null {
 		const raw = (el as any).rawAttrs as string | undefined;
 		if (!raw) return null;
 		const re = new RegExp(
-			`(?:^|\\s)${PayloadGenerator.escRe(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+			`(?:^|\\s)${PayloadGenerator._escapeRegexLiteral(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
 			"i"
 		);
 		const m = raw.match(re);
@@ -104,7 +110,7 @@ const PayloadGenerator = class {
 		return { value: m[3], quote: "" };
 	}
 
-	private getQuoteInfo(text: string, value: string): string[] {
+	private _getQuoteInfo(text: string, value: string): string[] {
 		const res = new Set<string>();
 		let startIndex = 0;
 		while (startIndex < text.length) {
@@ -147,7 +153,7 @@ const PayloadGenerator = class {
 		return inQuote !== null;
 	}
 
-	private isPayloadInSpecifiedContext(tagName: string, marker: string, inquote: boolean): boolean {
+	private _isPayloadInSpecifiedContext(tagName: string, marker: string, inquote: boolean): boolean {
 		const dbg = (m: string) => {
 			try {
 				(this as any)?.sdk?.console?.log?.(`[Reflector++][detectCtx] ${m}`);
@@ -158,7 +164,7 @@ const PayloadGenerator = class {
 		if (lower === "script") {
 			const all = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
 			nodes = all.filter((el) =>
-				this.isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())
+				this._isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())
 			);
 		} else {
 			nodes = ((this.root as any).querySelectorAll?.(tagName) ?? []) as any[];
@@ -236,28 +242,7 @@ const PayloadGenerator = class {
 		return false;
 	}
 
-	isPayloadSwitchingContext(tagName: string, suffix: string): boolean {
-		const nodes: any[] = (this.root as any).querySelectorAll(tagName);
-		for (const node of nodes) {
-			const text: string = node.text || "";
-			let inSingle = false, inDouble = false, inTpl = false, escaping = false;
-			for (let i = 0; i < text.length; i++) {
-				const ch = text[i];
-				if (escaping) { escaping = false; continue; }
-				if (ch === "\\" && (inSingle || inDouble || inTpl)) { escaping = true; continue; }
-				const inStr = inSingle || inDouble || inTpl;
-				if (ch === '"' && !inSingle && !inTpl) inDouble = !inDouble;
-				else if (ch === "'" && !inDouble && !inTpl) inSingle = !inSingle;
-				else if (ch === "`" && !inDouble && !inSingle) inTpl = !inTpl;
-			}
-			let quote = "";
-			if (inDouble) quote = '"'; else if (inSingle) quote = "'"; else if (inTpl) quote = "`";
-			if (quote && suffix.includes(quote)) return true;
-		}
-		return false;
-	}
-
-	detect(
+	public detect(
 		sdk: SDK | { console: { log: (msg: string) => void } },
 		context: { context: string[] },
 		prefix: string,
@@ -292,7 +277,7 @@ const PayloadGenerator = class {
 			const el = allEls[i];
 			const attrs: Record<string, string> = (el as any).attributes || el.attributes;
 			for (const name in attrs) {
-				const raw = this.getRawAttrDetail(el, name);
+				const raw = this._getRawAttrDetail(el, name);
 				if (!raw) continue;
 				const marker = prefix + payload + suffix;
 				if (raw.value.includes(marker)) {
@@ -342,7 +327,7 @@ const PayloadGenerator = class {
 		}
 		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
 		const execScripts = scripts.filter((el) =>
-			this.isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())
+			this._isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())
 		);
 		let matched = false;
 		for (const el of execScripts) {
@@ -395,7 +380,7 @@ const PayloadGenerator = class {
 				prefix
 			)} suffix=${JSON.stringify(suffix)} marker=${JSON.stringify(marker)}`
 		);
-		const hit = this.isPayloadInSpecifiedContext("style", marker, true);
+		const hit = this._isPayloadInSpecifiedContext("style", marker, true);
 		sdk.console.log(`[Reflector++][detect] cssInQuote result=${hit}`);
 		if (hit) out.push({ char: payload, context: "cssInQuote" });
 	}
@@ -423,7 +408,7 @@ const PayloadGenerator = class {
 				const el = allEls[i];
 				const attrs: Record<string, string> = (el as any).attributes || el.attributes;
 				for (const name in attrs) {
-					const raw = this.getRawAttrDetail(el, name);
+					const raw = this._getRawAttrDetail(el, name);
 					if (!raw) continue;
 					const marker = prefix + payload + suffix;
 					if (raw.value.includes(marker)) {
@@ -444,7 +429,7 @@ const PayloadGenerator = class {
 				const attrs: Record<string, string> = (el as any).attributes || el.attributes;
 				for (const name in attrs) {
 					if (!/^on/i.test(name)) continue;
-					const raw = this.getRawAttrDetail(el as any, name);
+					const raw = this._getRawAttrDetail(el as any, name);
 					if (!raw) continue;
 					const marker = prefix + payload + suffix;
 					if (raw.value.includes(marker)) {
@@ -460,12 +445,12 @@ const PayloadGenerator = class {
 			}
 		}
 		if (js) {
-			if (this.isPayloadInSpecifiedContext("script", prefix + payload + suffix, inquote)) {
+			if (this._isPayloadInSpecifiedContext("script", prefix + payload + suffix, inquote)) {
 				out.push({ char: payload, context: inquote ? "jsInQuote" : "js" });
 			}
 		}
 		if (css) {
-			if (this.isPayloadInSpecifiedContext("style", prefix + payload + suffix, inquote)) {
+			if (this._isPayloadInSpecifiedContext("style", prefix + payload + suffix, inquote)) {
 				out.push({ char: payload, context: inquote ? "cssInQuote" : "css" });
 			}
 		}
@@ -479,17 +464,17 @@ const PayloadGenerator = class {
 		out: Array<{ char: string; context: string }>
 	) {
 		if (payload !== "<") return;
-		const markers = this.variantsOf(prefix + payload + suffix);
+		const markers = this._variantsOf(prefix + payload + suffix);
 		let pushed = false;
-		if (markers.some((m) => this.isPayloadInSpecifiedContext("script", m, false))) {
+		if (markers.some((m) => this._isPayloadInSpecifiedContext("script", m, false))) {
 			out.push({ char: payload, context: "js" });
 			pushed = true;
 		}
-		if (markers.some((m) => this.isPayloadInSpecifiedContext("style", m, false))) {
+		if (markers.some((m) => this._isPayloadInSpecifiedContext("style", m, false))) {
 			out.push({ char: payload, context: "css" });
 			pushed = true;
 		}
-		if (markers.some((m) => this.containsTextOutsideTags(m))) {
+		if (markers.some((m) => this._containsTextOutsideTags(m))) {
 			if (!pushed) out.push({ char: payload, context: "html" });
 		}
 	}
@@ -505,35 +490,108 @@ const PayloadGenerator = class {
 		let matched = false;
 		if (!matched && ctx.context.includes("jsInQuote")) {
 			const marker = prefix + payload + suffix;
-			if (this.isPayloadInSpecifiedContext("script", marker, true)) {
+			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
 				out.push({ char: payload, context: "jsInQuote" });
 				matched = true;
 			}
 		}
 		if (!matched && ctx.context.includes("js")) {
 			const marker = prefix + payload + suffix;
-			if (this.isPayloadInSpecifiedContext("script", marker, false)) {
+			if (this._isPayloadInSpecifiedContext("script", marker, false)) {
 				out.push({ char: payload, context: "js" });
 				matched = true;
 			}
 		}
 		if (!matched && ctx.context.includes("cssInQuote")) {
 			const marker = prefix + payload + suffix;
-			if (this.isPayloadInSpecifiedContext("style", marker, true)) {
+			if (this._isPayloadInSpecifiedContext("style", marker, true)) {
 				out.push({ char: payload, context: "cssInQuote" });
 				matched = true;
 			}
 		}
 		if (!matched && ctx.context.includes("css")) {
 			const marker = prefix + payload + suffix;
-			if (this.isPayloadInSpecifiedContext("style", marker, false)) {
+			if (this._isPayloadInSpecifiedContext("style", marker, false)) {
 				out.push({ char: payload, context: "css" });
 				matched = true;
 			}
 		}
 	}
 
-	generate(
+	/**
+	 * High-level: Derive a minimal yet capability‑revealing set of probe payload characters ("payload")
+	 * and the set of contextual classifications ("context") for a value already observed in the
+	 * response body. These guide follow‑up probing & scoring.
+	 *
+	 * Inputs:
+	 *  - sdk: logging surface (subset of Caido SDK; only console.log used here).
+	 *  - reflectedValue: The raw reflected parameter value as originally supplied by the request.
+	 *    NOTE: It may arrive URL‑encoded (possibly twice). We intentionally perform TWO decodeURIComponent
+	 *    passes (mirroring legacy behavior) to surface decoded appearances while still marking contexts.
+	 *
+	 * Output object:
+	 *  {
+	 *    payload: string[]  // Ordered set of unique probe tokens (single chars or short strings) that
+	 *                       // have evidential value in the detected contexts. Examples:
+	 *                       //   '"' or '\''  → attempt quote breakout
+	 *                       //   '<'            → tag / markup injection capability
+	 *                       //   '\\'         → escape sequence leverage (JS/CSS string contexts)
+	 *                       //   '' (empty)     → attribute / handler / url attr value present unquoted
+	 *                       //   ':' '//' 'http:' ')' '(' ';' etc. → context‑specific follow‑up probes
+	 *    context: string[]  // Unique set (string identifiers) of where the reflection appears literally
+	 *                       // or structurally. Examples: 'js', 'jsInQuote', 'css', 'attributeInQuote',
+	 *                       // 'eventHandlerAttr', 'styleAttrInQuote', 'urlAttr', 'html', 'htmlComment'.
+	 *  }
+	 *
+	 * Detection Strategy (ordered for determinism & minimal probe inflation):
+	 *  1. DOM Walk (_walkNodes) – For each node we attempt mutually exclusive specialized handlers:
+	 *     a. _handleElementStructural: SCRIPT / STYLE / TEMPLATE containers where the reflected value
+	 *        is inside raw text. Determines scripting vs style contexts & whether inside quotes.
+	 *     b. _handleTextNode: Plain text nodes outside script/style map to 'html'. If nested in <template>,
+	 *        we classify as 'templateHtml'.
+	 *     c. _handleCommentNode: Marks 'htmlComment'. (Lower signal for exploitation, but recorded.)
+	 *     d. _handleAttributes: Attribute‑level heuristics – distinguishes:
+	 *         - Generic attributes (quoted vs unquoted vs encoded only)
+	 *         - Event handler attributes (on*) w/ quoting
+	 *         - URL attributes (href/src/etc.) + srcset descriptors
+	 *         - style / meta refresh / iframe srcdoc special cases
+	 *         - style/event/url attribute forms add tailored probe characters (e.g., ':' '//' ';' '(' ')').
+	 *  2. After traversal, _applyHtmlFallbackIfNeeded adds { '<', 'html' } if no other context matched but
+	 *     the value clearly appears in visible text outside tags after decoding variants.
+	 *
+	 * Probe Generation Principles:
+	 *  - Only add characters relevant to the confirmed context(s) to keep later probing efficient.
+	 *  - Quote characters (" ' `) added only when the value appears inside that quote type.
+	 *  - Backslash (\\) added when inside quoted JS/CSS or JSON string contexts to test escape handling.
+	 *  - Empty string payload ("") signals that re‑sending the baseline can confirm structure where
+	 *    literal injection already implies capability (e.g., unquoted attribute, handler, or url attr).
+	 *  - URL / navigation contexts add ':' '//' 'http:' to explore protocol / scheme vector potential.
+	 *
+	 * Encoding / Variant Considerations:
+	 *  - We examine the literal reflected body text for inclusion; separate encoded‑only signals are
+	 *    handled elsewhere (encodedSignalDetection). Here we focus strictly on literal presences.
+	 *  - Attribute raw vs decoded value: If the *raw* attribute source contains the exact string, we can
+	 *    infer quoting precisely. If only the decoded value (parser normalized) includes the reflection,
+	 *    we mark it as an encoded / escaped variant (e.g., 'attributeEscaped').
+	 *
+	 * Ordering & Determinism:
+	 *  - Sets (payloadSet/contextSet) preserve logical insertion order by operating on a Set then
+	 *    spreading to arrays at the end – consistent test snapshots rely on stable ordering of traversal.
+	 *  - Early returns in handlers ensure the *first* structural match for a node governs classification,
+	 *    preventing double counting the same occurrence into multiple mutually exclusive contexts.
+	 *
+	 * Complexity:
+	 *  Let N = total DOM nodes, A = total attributes on candidate elements.
+	 *  Traversal is O(N + A). Per‑node operations are string includes / small RegExp matches; no quadratic
+	 *  concatenations. This method executes once per reflected parameter candidate.
+	 *
+	 * Edge Cases / Defensive Notes:
+	 *  - Extremely large bodies: current library parsing cost dominates; this routine adds minimal overhead.
+	 *  - Duplicate contexts from multiple occurrences are de‑duplicated by the Set semantics.
+	 *  - If a value appears in multiple structural contexts (rare), multiple context labels are emitted,
+	 *    enabling composite scoring later.
+	 */
+	public generate(
 		sdk: SDK | { console: { log: (msg: string) => void } },
 		reflectedValue: string
 	): { payload: string[]; context: string[] } {
@@ -545,7 +603,7 @@ const PayloadGenerator = class {
 		const tmpls = (this.root as any).querySelectorAll?.("template") ?? [];
 		const execFlags = scripts.slice(0, 10).map((el: any) => {
 			const t = (el.getAttribute?.("type") || "").toString();
-			return `${t || "<empty>"} => exec=${this.isJsExecutableScriptType(t)}`;
+			return `${t || "<empty>"} => exec=${this._isJsExecutableScriptType(t)}`;
 		});
 		sdk.console.log(
 			`[Reflector++] Generating payloads for reflected value: ${reflectedValue}`
@@ -553,7 +611,7 @@ const PayloadGenerator = class {
 		reflectedValue = decodeURIComponent(reflectedValue);
 		const payloadSet = new Set<string>();
 		const contextSet = new Set<string>();
-		this.walkNodes(this.root as any, (node: any) => {
+		this._walkNodes(this.root as any, (node: any) => {
 			// Order matters; each helper returns true if it handled the node fully.
 			if (this._handleElementStructural(node, reflectedValue, payloadSet, contextSet, sdk)) return;
 			if (this._handleTextNode(node, reflectedValue, payloadSet, contextSet, sdk)) return;
@@ -642,8 +700,8 @@ const PayloadGenerator = class {
 		sdk: any
 	): boolean {
 		const typeAttr = (node.getAttribute?.("type") || "") as string;
-		if (this.isJsExecutableScriptType(typeAttr)) {
-			const quotes = this.getQuoteInfo(text, reflectedValue);
+		if (this._isJsExecutableScriptType(typeAttr)) {
+			const quotes = this._getQuoteInfo(text, reflectedValue);
 			const quote = quotes[0] || "";
 			payloadSet.add(quote);
 			let ctx = "js";
@@ -663,7 +721,7 @@ const PayloadGenerator = class {
 		}
 		const t = (typeAttr || "").toLowerCase();
 		if (/(?:application|text)\/(?:json|ld\+json)/.test(t)) {
-			const quotes = this.getQuoteInfo(text, reflectedValue);
+			const quotes = this._getQuoteInfo(text, reflectedValue);
 			const quote = quotes[0] || '"';
 			contextSet.add(quotes.length ? "jsonInQuote" : "json");
 			payloadSet.add(quote);
@@ -686,7 +744,7 @@ const PayloadGenerator = class {
 		payloadSet: Set<string>,
 		contextSet: Set<string>
 	): boolean {
-		const quotes = this.getQuoteInfo(text, reflectedValue);
+		const quotes = this._getQuoteInfo(text, reflectedValue);
 		const quote = quotes[0] || "";
 		payloadSet.add(quote);
 		let ctx = "css";
@@ -763,7 +821,7 @@ const PayloadGenerator = class {
 		for (const name in attrs) {
 			const decoded = attrs[name];
 			if (!decoded || !decoded.includes(reflectedValue)) continue;
-			const raw = this.getRawAttrDetail(el, name);
+			const raw = this._getRawAttrDetail(el, name);
 			const lower = name.toLowerCase();
 			const tagName = (el.rawTagName || "").toUpperCase();
 			if (/^on[a-z0-9_:-]+$/i.test(lower)) {
@@ -863,8 +921,8 @@ const PayloadGenerator = class {
 		payloadSet: Set<string>,
 		contextSet: Set<string>
 	) {
-		const markers = this.variantsOf(reflectedValue);
-		if (contextSet.size === 0 && markers.some((m) => this.containsTextOutsideTags(m))) {
+		const markers = this._variantsOf(reflectedValue);
+		if (contextSet.size === 0 && markers.some((m) => this._containsTextOutsideTags(m))) {
 			contextSet.add("html");
 			payloadSet.add("<");
 		}
