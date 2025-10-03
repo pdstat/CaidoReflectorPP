@@ -1,4 +1,5 @@
-import { checkHeaderReflections } from "../src/analysis/headerReflection.js";
+import { checkHeaderReflections, confirmHeaderReflection } from "../src/analysis/headerReflection.js";
+import { ResponseHeaderPayloadGenerator } from "../src/payload/responseHeaderPayloadGenerator.ts";
 
 // Build a mutable spec used by confirmHeaderReflection
 const makeRequest = (opts: Partial<{ query: string; method: string; cookies: string; body: string; contentType: string }>) => {
@@ -172,5 +173,88 @@ describe("checkHeaderReflections", () => {
     const out = await checkHeaderReflections(req as any, response as any, sdk);
     expect(out.length).toBe(1);
     expectHeaderFinding(out[0], "p", ["X-Ref-Case"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Direct unit tests for confirmHeaderReflection (migrated from separate file)
+// ---------------------------------------------------------------------------
+
+// SDK maker for direct confirm tests allowing custom header list & transform
+function makeSdkConfirm(reflectHeaders: string[], transform?: (query: string) => string) {
+  return {
+    console: { log: jest.fn() },
+    requests: {
+      send: async (spec: any) => {
+        const query = spec.getQuery?.() || "";
+        const reflected = transform ? transform(query) : query;
+        const headers: Record<string,string> = {};
+        for (const h of reflectHeaders) headers[h] = `echo:${reflected}`;
+        return { response: { getCode: () => 200, getHeaders: () => headers } };
+      }
+    }
+  } as any;
+}
+
+describe("confirmHeaderReflection (direct)", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("confirms header, returns allowedChars & crlf flag from detect()", async () => {
+    const mockPlan = {
+      markers: [
+        { ch: ':', pre: 'P1', suf: 'S1', needle: 'P1%3AS1' },
+        { ch: '\n', pre: 'P2', suf: 'S2', needle: 'P2%0AS2' }
+      ],
+      injectedValue: 'P1%3AS1P2%0AS2'
+    };
+    const buildSpy = jest.spyOn(ResponseHeaderPayloadGenerator, 'buildPlan').mockReturnValue(mockPlan as any);
+    const detectSpy = jest.spyOn(ResponseHeaderPayloadGenerator, 'detect').mockImplementation((_headers, markers) => {
+      expect(markers).toBe(mockPlan.markers);
+      return { allowedChars: [':', '\n'], crlfInjection: true } as any;
+    });
+    const originalRequest = makeRequest({ query: "redir=foo" });
+    const param = { key: 'redir', value: 'foo', source: 'URL', method: 'GET', code: 200 } as any;
+    const sdk = makeSdkConfirm(['Location']);
+    const out = await confirmHeaderReflection(originalRequest as any, param, ['Location'], sdk);
+    expect(buildSpy).toHaveBeenCalledWith(['Location']);
+    expect(detectSpy).toHaveBeenCalled();
+    expect(out.confirmed).toEqual(['Location']);
+    expect(out.allowedChars).toEqual([':', '\n']);
+    expect(out.crlf).toBe(true);
+  });
+
+  test("case-insensitive CANARY confirmation (uppercase reflection)", async () => {
+    const mockPlan = { markers: [], injectedValue: '' };
+    jest.spyOn(ResponseHeaderPayloadGenerator, 'buildPlan').mockReturnValue(mockPlan as any);
+    jest.spyOn(ResponseHeaderPayloadGenerator, 'detect').mockReturnValue({ allowedChars: [], crlfInjection: false } as any);
+    let capturedCanary = '';
+    const sdk = makeSdkConfirm(['X-Reflect'], (query) => {
+      const m = /redir=(_HDR_CANARY_[a-z0-9]+)/i.exec(query);
+      if (m) { capturedCanary = m[1]; return query.replace(m[1], m[1].toUpperCase()); }
+      return query;
+    });
+    const originalRequest = makeRequest({ query: "redir=orig" });
+    const param = { key: 'redir', value: 'orig', source: 'URL', method: 'GET', code: 200 } as any;
+    const out = await confirmHeaderReflection(originalRequest as any, param, ['X-Reflect'], sdk);
+    expect(capturedCanary).toMatch(/^_HDR_CANARY_/);
+    expect(out.confirmed).toEqual(['X-Reflect']);
+  });
+
+  test("no confirmation when header lacks CANARY", async () => {
+    const mockPlan = { markers: [], injectedValue: '' };
+    jest.spyOn(ResponseHeaderPayloadGenerator, 'buildPlan').mockReturnValue(mockPlan as any);
+    jest.spyOn(ResponseHeaderPayloadGenerator, 'detect').mockReturnValue({ allowedChars: ['x'], crlfInjection: false } as any);
+    const sdk = {
+      console: { log: jest.fn() },
+      requests: { send: async () => ({ response: { getCode: () => 200, getHeaders: () => ({ 'Location': 'nope' }) } }) }
+    } as any;
+    const originalRequest = makeRequest({ query: "redir=zzz" });
+    const param = { key: 'redir', value: 'zzz', source: 'URL', method: 'GET', code: 200 } as any;
+    const out = await confirmHeaderReflection(originalRequest as any, param, ['Location'], sdk);
+    expect(out.confirmed).toEqual([]);
+    expect(out.allowedChars).toEqual([]);
+    expect(out.crlf).toBe(false);
   });
 });
