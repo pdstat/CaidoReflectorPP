@@ -66,20 +66,6 @@ describe('query utilities', () => {
       expect(spec._query).toBe('a=1&b=2');
     });
 
-    test('updates JSON body nested path when present', () => {
-      const spec = {
-        _body: JSON.stringify({ user: { name: 'alice', age: 30 } }),
-        getBody() { return { toText: () => this._body }; },
-        setBody(v: string) { this._body = v; },
-        getHeader(name: string) { return name === 'Content-Type' ? ['application/json'] : undefined; },
-        getQuery: () => '',
-        setQuery: (_: string) => {},
-      } as any;
-      const param: RequestParameter = { key: 'user.name', value: 'alice', source: 'Body', method: 'POST', code: 200 };
-      mutateParamValue(spec, param, 'bob', sdk());
-      expect(JSON.parse(spec._body)).toEqual({ user: { name: 'bob', age: 30 } });
-    });
-
     test('JSON body unchanged if path missing', () => {
       const original = { user: { name: 'alice' } };
       const spec = {

@@ -47,29 +47,6 @@ export const mutateParamValue = (
     if (param.source === 'Body' && requestSpec.getBody()) {
       const bodyText = requestSpec.getBody()?.toText();
       if (!bodyText) return;
-      const contentType = requestSpec.getHeader('Content-Type');
-      if (contentType && contentType[0]?.includes('application/json')) {
-        try {
-          const json = JSON.parse(bodyText);
-          const path = param.key.split('.').filter(Boolean);
-          if (path.length) {
-            let cursor: any = json;
-            for (let i = 0; i < path.length - 1; i++) {
-              if (typeof cursor[path[i]] !== 'object' || cursor[path[i]] === null) { cursor = null; break; }
-              cursor = cursor[path[i]];
-            }
-            if (cursor) {
-              const last = path[path.length - 1];
-              if (Object.prototype.hasOwnProperty.call(cursor, last)) {
-                cursor[last] = newValue;
-                requestSpec.setBody(JSON.stringify(json));
-                return;
-              }
-            }
-          }
-        } catch { /* ignore JSON issues */ }
-      }
-      // fallback form-urlencoded
       const form = parseQueryString(bodyText);
       if (param.key in form) {
         form[param.key] = newValue;
