@@ -10,7 +10,6 @@ export type ScoreInputs = {
     stableProbe?: boolean;
 };
 
-// --- Extended scoring result (Suggestions A, C, D) ---
 export type ScoreDelta = { label: string; delta: number; base?: number };
 export type ScoreRationale = {
     confidence: ScoreDelta[];
