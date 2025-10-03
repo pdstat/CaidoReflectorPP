@@ -28,10 +28,11 @@ export async function confirmHeaderReflection(
     const confirmed: string[] = [];
     try {
       const newHeaders: Record<string, string | string[]> = (result.response as any).getHeaders ? (result.response as any).getHeaders() : {};
+      const canaryLower = CANARY.toLowerCase();
       for (const h of headerNames) {
         const v = newHeaders[h];
         const values = Array.isArray(v) ? v : [v];
-        if (values.some(val => typeof val === "string" && val.includes(CANARY))) confirmed.push(h);
+        if (values.some(val => typeof val === "string" && val.toLowerCase().includes(canaryLower))) confirmed.push(h);
       }
     } catch (e) {
       sdk.console.log(`[Reflector++] Error reading headers for confirmation: ${e}`);

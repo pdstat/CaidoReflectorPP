@@ -126,4 +126,51 @@ describe("checkHeaderReflections", () => {
     // only param with value is a=1 but not in headers => empty
     expect(out.length).toBe(0);
   });
+
+  test("confirmation is case-insensitive on reflected canary sequence", async () => {
+    // We force the responder to uppercase the inserted canary when echoing.
+    const req = makeRequest({ query: "q=ValueZZ" });
+    const sdk = {
+      console: { log: jest.fn() },
+      requests: {
+        send: async (spec: any) => {
+          const query = spec.getQuery?.() || "";
+            // Extract CANARY value (after param rewrite) and uppercase it in header
+          const m = /q=(_HDR_CANARY_[a-z0-9]+)/i.exec(query);
+          const headers: Record<string,string> = {};
+          if (m) {
+            headers["X-Ref-CS"] = `echo:${m[1].toUpperCase()}`; // different casing
+          }
+          return { response: { getCode: () => 200, getHeaders: () => headers } };
+        }
+      }
+    } as any;
+  // Initial response must contain the original parameter value (case-insensitive) so it's flagged for confirmation.
+  const response = makeResponse({ "X-Ref-CS": "pre valuezz post" });
+    const out = await checkHeaderReflections(req as any, response as any, sdk);
+    expect(out.length).toBe(1);
+    expectHeaderFinding(out[0], "q", ["X-Ref-CS"]);
+  });
+
+  test("confirmation succeeds when server preserves exact CANARY casing", async () => {
+    const req = makeRequest({ query: "p=KeepCase" });
+    const sdk = {
+      console: { log: jest.fn() },
+      requests: {
+        send: async (spec: any) => {
+          const query = spec.getQuery?.() || "";
+          // Extract CANARY inserted for p
+          const m = /p=(_HDR_CANARY_[a-z0-9]+)/.exec(query);
+          const headers: Record<string,string> = {};
+          if (m) headers["X-Ref-Case"] = `wrapper-${m[1]}-suffix`; // unchanged casing
+          return { response: { getCode: () => 200, getHeaders: () => headers } };
+        }
+      }
+    } as any;
+    // Initial response must contain original p value so it is considered for confirmation
+    const response = makeResponse({ "X-Ref-Case": "prefix keepcase postfix" });
+    const out = await checkHeaderReflections(req as any, response as any, sdk);
+    expect(out.length).toBe(1);
+    expectHeaderFinding(out[0], "p", ["X-Ref-Case"]);
+  });
 });
