@@ -5,7 +5,7 @@ import { parse, HTMLElement, Node } from "node-html-parser";
 
 // Moved from src/payloadGenerator.ts (original location) for modularization.
 // NOTE: Keep default export name stable for existing imports via shim.
-const PayloadGenerator = class {
+const ResponseBodyPayloadGenerator = class {
 	root: HTMLElement | Node;
 	body = "";
 
@@ -100,7 +100,7 @@ const PayloadGenerator = class {
 		const raw = (el as any).rawAttrs as string | undefined;
 		if (!raw) return null;
 		const re = new RegExp(
-			`(?:^|\\s)${PayloadGenerator._escapeRegexLiteral(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+			`(?:^|\\s)${ResponseBodyPayloadGenerator._escapeRegexLiteral(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
 			"i"
 		);
 		const m = raw.match(re);
@@ -929,5 +929,5 @@ const PayloadGenerator = class {
 	}
 };
 
-export default PayloadGenerator;
+export default ResponseBodyPayloadGenerator;
 

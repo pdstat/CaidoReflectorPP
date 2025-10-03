@@ -1,5 +1,5 @@
 // __tests__/payloadGenerator.spec.ts
-import PayloadGenerator from "../src/payload/payloadGenerator.js";
+import ResponseBodyPayloadGenerator from "../src/payload/responseBodyPayloadGenerator.ts";
 
 const sdk = () => ({ console: { log: jest.fn() } });
 
@@ -24,19 +24,19 @@ function det(
     payload: string,
     suffix: string
 ) {
-    const gen = new PayloadGenerator(html);
+    const gen = new ResponseBodyPayloadGenerator(html);
     return gen.detect(sdk(), { context: ctx }, prefix, payload, suffix);
 }
 
 function gen(html: string, reflected = "REF") {
-    return new PayloadGenerator(html).generate(sdk(), reflected);
+    return new ResponseBodyPayloadGenerator(html).generate(sdk(), reflected);
 }
 
 describe("PayloadGenerator.detect()", () => {
     describe("Attribute-in-quote checks (true breakout vs decoded-only)", () => {
         test("Case-folded reflection: uppercase wrappers still detected in quoted JS", () => {
             const html = `<script>var s="preabcxyzsuf";</script>`;
-            const gen = new PayloadGenerator(html);
+            const gen = new ResponseBodyPayloadGenerator(html);
             // Simulate server lowercasing: our wrappers are upper, response is lower
             const prefix = "ABC".toUpperCase(); // random upper
             const suffix = "XYZ".toUpperCase();

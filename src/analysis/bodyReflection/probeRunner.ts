@@ -6,7 +6,7 @@ import { randomValue, findMatches } from "../../utils/text.js";
 import { mutateParamValue } from "../../utils/query.js";
 import { passesContentTypeGating } from "../../utils/http.js";
 import { allowedDetectionContextsFor, isLiteralContext } from "../../utils/contexts.js";
-import PayloadGenerator from "../../payload/payloadGenerator.js";
+import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 
 export interface ProbeResult {
     confirmed: boolean;
@@ -54,7 +54,7 @@ export async function runProbes(
                 if (probeSig === baselineSig) probeWasStable = true;
             }
             const probeBody = probe.response.getBody()?.toText() || '';
-            const detectPg = new PayloadGenerator(probeBody);
+            const detectPg = new ResponseBodyPayloadGenerator(probeBody);
             for (const m of markers) {
                 const needle = m.pre + encodeURIComponent(m.ch) + m.suf;
                 if (probeBody.indexOf(needle) === -1) continue;

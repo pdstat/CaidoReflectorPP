@@ -6,7 +6,7 @@ import { buildEndpoint } from "../../utils/http.js";
 import { enumerateRequestParameters } from "../../utils/params.js";
 import { KEY_WORDS } from "../../core/constants.js";
 import { scoreFinding } from "../scoring.js";
-import PayloadGenerator from "../../payload/payloadGenerator.js";
+import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 import { getTags } from "./context.js";
 import { modifyAmbiguousParameters } from "./probes.js"; // compiled extension form
 import { errorParamsStore } from "../../stores/errorStore.js";
@@ -27,7 +27,7 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<
   sdk.console.log("[Reflector++] Checking parameters for reflection (payload-based)...");
   const bodyText = response.getBody()?.toText() || "";
   const tags = getTags(bodyText);
-  const payloadGenerator = new PayloadGenerator(bodyText);
+  const payloadGenerator = new ResponseBodyPayloadGenerator(bodyText);
   const baselineCode = response.getCode();
   const baselineBody = bodyText;
   const baselineSig = computeKeywordCounts(baselineBody, KEY_WORDS).join(",");
