@@ -12,7 +12,7 @@ jest.mock("../src/utils/text.js", () => {
 
 // Provide a programmable mock for PayloadGenerator.detect
 let mockDetectImpl: (pre: string, ch: string, suf: string, body: string) => any[] = () => [];
-jest.mock("../src/payload/payloadGenerator.js", () => {
+jest.mock("../src/payload/responseBodyPayloadGenerator.js", () => {
   return {
     __esModule: true,
     default: class MockPayloadGenerator {
