@@ -82,9 +82,30 @@ export function generateReport(param: ReportReflectedParameter): string {
 
   let details = line;
   if (aggressive && aggressive.length) {
-    details += `  Allowed characters (literal, verified in this context):`;
+    details += `. Allowed characters (literal, verified in this context):`;
     for (const ch of aggressive) {
-      const shown = ch === "" ? "<empty>" : JSON.stringify(ch);
+      let shown;
+      if (ch === " ") {
+        shown = "'space'";
+      } else if (ch === "'") {
+        shown = `"'"`;
+      } else if (ch === '"') {
+        shown = `'"'`;
+      } else if (ch === "`") {
+        shown =  "'`'";
+      } else if (ch === "\\") {
+        shown = "'\\'";
+      } else if (ch === "<") {
+        shown = "'<'";
+      } else if (ch === ">") {
+        shown = "'>'";
+      } else if (ch === "/") {
+        shown = "'/'";
+      } else if (ch === "") {
+        shown = "alphanumeric";
+      } else {
+        shown = `'${ch}'`;
+      }
       details += `\n    - ${shown}`;
     }
     details += `\n`;
