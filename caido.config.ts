@@ -2,7 +2,7 @@ import { defineConfig } from '@caido-community/dev';
 
 const PLUGIN_VERSION = '0.1.0';
 
-const id = "reflector++";
+const id = "reflector";
 
 export default defineConfig({
   id,
