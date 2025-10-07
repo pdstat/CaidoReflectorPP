@@ -1,18 +1,24 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "NodeNext",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["ESNext"],
+
+    "jsx": "preserve",
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
     "strict": true,
+    "skipLibCheck": true,
     "resolveJsonModule": true,
+
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "sourceMap": true,
+    "noUnusedLocals": true,
+
+    "useDefineForClassFields": true,
     "isolatedModules": true,
-    "types": ["jest", "node"],
-  "outDir": "dist",
-  "allowImportingTsExtensions": true
-  },
-  "include": ["src/**/*", "tests/**/*"],
-  "exclude": ["node_modules", "final", "dist"]
+
+    "baseUrl": "."
+  }
 }
