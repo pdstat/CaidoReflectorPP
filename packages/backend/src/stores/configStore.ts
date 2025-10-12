@@ -4,12 +4,22 @@ export class ConfigStore {
 
     private _probeOutOfScopeRequests = false;
 
+    private _noSniffContentTypes: Set<string> = new Set<string>();
+
     static getProbeOutOfScopeRequests(): boolean {
         return ConfigStore.instance._probeOutOfScopeRequests;
     }
 
     static setProbeOutOfScopeRequests(value: boolean) {
         ConfigStore.instance._probeOutOfScopeRequests = value;
+    }
+
+    static getNoSniffContentTypes(): Set<string> {
+        return ConfigStore.instance._noSniffContentTypes;
+    }
+
+    static setNoSniffContentTypes(value: Set<string>) {
+        ConfigStore.instance._noSniffContentTypes = value;
     }
 
     constructor() {
