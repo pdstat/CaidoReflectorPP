@@ -3,6 +3,7 @@ import { StorageSDK } from "@caido/sdk-frontend/src/types/storage";
 import { FrontendSDK } from "@/types";
 
 const PROBE_OOS_STORAGE_KEY = "probeOutOfScope"
+const LOG_UNCONFIRMED_FINDINGS_STORAGE_KEY = "logUnconfirmedFindings"
 const CHECK_HEADER_REFLECTIONS_STORAGE_KEY = "checkResponseHeaderReflections"
 const CONTENT_TYPES_STORAGE_KEY = "noSniffContentTypes"
 
@@ -54,6 +55,15 @@ export class PluginSettings {
     public async setCheckResponseHeaderReflections(value: boolean): Promise<void> {
         await this.sdk.backend.setCheckResponseHeaderReflections(value);
         return this.set<boolean>(CHECK_HEADER_REFLECTIONS_STORAGE_KEY, value);
+    }
+
+    public getLogUnconfirmedFindings(): boolean {
+        return this.get<boolean>(LOG_UNCONFIRMED_FINDINGS_STORAGE_KEY, false);
+    }
+
+    public async setLogUnconfirmedFindings(value: boolean): Promise<void> {
+        await this.sdk.backend.setLogUnconfirmedFindings(value);
+        return this.set<boolean>(LOG_UNCONFIRMED_FINDINGS_STORAGE_KEY, value);
     }
 
     public getDefaultNoSniffContentTypes(): Set<string> {

@@ -4,6 +4,8 @@ export class ConfigStore {
 
     private _probeOutOfScopeRequests = false;
 
+    private _logUnconfirmedFindings = false;
+
     private _checkResponseHeaderReflections = true;
 
     private _noSniffContentTypes: Set<string> = new Set<string>();
@@ -22,6 +24,14 @@ export class ConfigStore {
 
     static setCheckResponseHeaderReflections(value: boolean) {
         ConfigStore.instance._checkResponseHeaderReflections = value;
+    }
+
+    static getLogUnconfirmedFindings(): boolean {
+        return ConfigStore.instance._logUnconfirmedFindings;
+    }
+
+    static setLogUnconfirmedFindings(value: boolean) {
+        ConfigStore.instance._logUnconfirmedFindings = value;
     }
 
     static getNoSniffContentTypes(): Set<string> {

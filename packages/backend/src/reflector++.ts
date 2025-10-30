@@ -35,21 +35,7 @@ export async function run(
         return;
     }
 
-    // --- Mode toggle (configurable) ---
-    // Modes:
-    //   strict            -> only literal contexts become findings.
-    //   strict+signals    -> literal findings + append informational encoded section.
-    //   exploratory       -> promotes encoded signals to low-severity findings as well.
-    // Order of resolution:
-    //   1. Explicit override on input.config?.mode
-    //   2. Environment variable REFLECTOR_MODE
-    //   3. Default fallback "strict+signals"
-    const rawMode = "strict+signals";
-    const VALID_MODES = new Set(["strict", "strict+signals", "exploratory"]);
-    const MODE = VALID_MODES.has(rawMode) ? rawMode : "strict+signals";
-    if (!VALID_MODES.has(rawMode)) {
-        sdk.console.log(`[Reflector++] Unrecognized mode '${rawMode}', falling back to 'strict+signals'`);
-    }
+    const LOG_UNCONFIRMED_FINDINGS = ConfigStore.getLogUnconfirmedFindings();
 
     sdk.console.log("=====================================");
 
@@ -81,7 +67,7 @@ export async function run(
 
     const encodedSignals = getEncodedSignals(input);
 
-    if (MODE === "exploratory" && encodedSignals?.length) {
+    if (LOG_UNCONFIRMED_FINDINGS && encodedSignals?.length) {
         const merged = mergeEncodedSignals(encodedSignals);
         for (const [name, m] of merged.entries()) {
             // Pick a representative escaped context to score
@@ -125,13 +111,13 @@ export async function run(
     }
 
     // Append encoded signal section if enabled
-    if ((MODE === "strict+signals" || MODE === "exploratory") && encodedSignals?.length) {
+    if (LOG_UNCONFIRMED_FINDINGS && encodedSignals?.length) {
         // buildEncodedSignalsSection is statically imported above
         details += buildEncodedSignalsSection(encodedSignals);
     }
 
     // Unified finding creation (avoid duplicates)
-    if (hasLiteral || (MODE !== "strict" && encodedSignals?.length)) {
+    if (hasLiteral || (LOG_UNCONFIRMED_FINDINGS && encodedSignals?.length)) {
         const endpoint = buildEndpoint(request);
         const keyParts = reflectedParameters
             .map(r => `${r.name}@${(r.context || "").toLowerCase()}`)

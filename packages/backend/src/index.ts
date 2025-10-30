@@ -16,7 +16,7 @@ const withTimeout: WithTimeout = (asyncOperation, timeoutMs) => {
     return Promise.race([
         asyncOperation(),
         new Promise<never>(
-            (_, reject) => setTimeout(() => reject(new Error(`Operation timesd out after ${timeoutMs}ms`)), timeoutMs)
+            (_, reject) => setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs)
         )
     ]);
 };
@@ -24,6 +24,7 @@ const withTimeout: WithTimeout = (asyncOperation, timeoutMs) => {
 export type API = DefineAPI<{
     setProbeOutOfScope: (value: boolean) => Promise<void>;
     setCheckResponseHeaderReflections: (value: boolean) => Promise<void>;
+    setLogUnconfirmedFindings: (value: boolean) => Promise<void>;
     setNoSniffContentTypes: (value: Set<string>) => Promise<void>;
 }>;
 
@@ -36,6 +37,9 @@ export function init(sdk: SDK<API>) {
     })
     sdk.api.register("setCheckResponseHeaderReflections", async (_sdk, value: boolean) => {
         ConfigStore.setCheckResponseHeaderReflections(value)
+    })
+    sdk.api.register("setLogUnconfirmedFindings", async (_sdk, value: boolean) => {
+        ConfigStore.setLogUnconfirmedFindings(value)
     })
     sdk.events.onInterceptResponse(async (sdk, request: Request, response: Response) => {
         const shouldProbe = ConfigStore.getProbeOutOfScopeRequests();

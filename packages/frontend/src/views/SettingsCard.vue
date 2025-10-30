@@ -8,6 +8,7 @@ import { Reflector } from "@/types"
 
 const probeOutOfScope = ref(false)
 const checkResponseHeaderReflections = ref(true)
+const logUnconfirmedFindings = ref(false)
 const noSniffContentTypes = ref<string>("")
 const loaded = ref(false)
 const settings = Reflector.settings
@@ -59,6 +60,12 @@ watch(checkResponseHeaderReflections, async (v) => {
     }
 })
 
+watch(logUnconfirmedFindings, async (v) => {
+    if (loaded.value) {
+        await settings.setLogUnconfirmedFindings(v)
+    }
+})
+
 </script>
 
 <template>
@@ -100,14 +107,10 @@ watch(checkResponseHeaderReflections, async (v) => {
                                 <ToggleSwitch v-model="checkResponseHeaderReflections" :disabled="!loaded" />
                                 <label class="text-sm cursor-pointer select-none">Check for reflections in response headers</label>
                             </div>
-                            <!--div class="flex items-center gap-2">
-                                <ToggleSwitch v-model="probeOutOfScope" :disabled="!loaded" />
-                                <label class="text-sm cursor-pointer select-none">Probe request header reflections</label>
-                            </div>
                             <div class="flex items-center gap-2">
-                                <ToggleSwitch v-model="probeOutOfScope" :disabled="!loaded" />
-                                <label class="text-sm cursor-pointer select-none">Enable response header reflections</label>
-                            </div-->
+                                <ToggleSwitch v-model="logUnconfirmedFindings" :disabled="!loaded" />
+                                <label class="text-sm cursor-pointer select-none">Log unconfirmed (encoded) findings</label>
+                            </div>
                         </div>
                     </div>
                 </div>
