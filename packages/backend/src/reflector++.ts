@@ -10,6 +10,7 @@ import { COMMON_ANALYTICS_HOSTS_SET, COMMON_ANALYTICS_ENDPOINTS_SET } from "./co
 import { mergeEncodedSignals } from "./analysis/mergeEncodedSignals.js";
 import { CONTEXT } from "./analysis/contextMap.js";
 import { getEncodedSignals } from "./analysis/encodedSignalsStore.js";
+import { ConfigStore } from "./stores/configStore.js";
 
 // Use unified analyzed reflected parameter type
 type ReflectedParameter = AnalyzedReflectedParameter;
@@ -52,8 +53,9 @@ export async function run(
 
     sdk.console.log("=====================================");
 
-    // 1. Always attempt header reflection detection regardless of content-type gating
-    const headerReflections = await checkHeaderReflections(request, response, sdk);
+    // 1. Always attempt header reflection detection regardless of content-type gating unless disabled
+    const checkResponseHeaderReflections = ConfigStore.getCheckResponseHeaderReflections();
+    const headerReflections = checkResponseHeaderReflections ? await checkHeaderReflections(request, response, sdk) : [];
 
     // 2. Apply body/content related gating only for body reflection scanning
     const rawContentType = response.getHeader("Content-Type");

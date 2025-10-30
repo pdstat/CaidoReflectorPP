@@ -7,6 +7,7 @@ import { ref, onMounted, watch } from "vue"
 import { Reflector } from "@/types"
 
 const probeOutOfScope = ref(false)
+const checkResponseHeaderReflections = ref(true)
 const noSniffContentTypes = ref<string>("")
 const loaded = ref(false)
 const settings = Reflector.settings
@@ -14,11 +15,11 @@ const settings = Reflector.settings
 const allowedRegex = /^[!#$%&'*+\-\.^_`|~0-9A-Za-z/;=," ]+$/
 
 const validateBeforeInput = (event: InputEvent) => {
-  const char = event.data
-  // If the input data (character) exists and doesn't match the regex, block it
-  if (char && !allowedRegex.test(char)) {
-    event.preventDefault() // Prevent invalid input from being applied
-  }
+    const char = event.data
+    // If the input data (character) exists and doesn't match the regex, block it
+    if (char && !allowedRegex.test(char)) {
+        event.preventDefault() // Prevent invalid input from being applied
+    }
 }
 
 const saveContentTypes = async () => {
@@ -52,6 +53,12 @@ watch(probeOutOfScope, async (v) => {
     }
 })
 
+watch(checkResponseHeaderReflections, async (v) => {
+    if (loaded.value) {
+        await settings.setCheckResponseHeaderReflections(v)
+    }
+})
+
 </script>
 
 <template>
@@ -63,8 +70,8 @@ watch(probeOutOfScope, async (v) => {
         <template #content>
             <div class="space-y-6">
                 <div class="flex space-x-6">
-                <!--Content type settings-->
-                <div class="w-1/2 space-y-3">
+                    <!--Content type settings-->
+                    <div class="w-1/2 space-y-3">
                         <label class="text-lg block mb-2">
                             Content Types<br />
                             <span class="text-sm text-muted">
@@ -76,17 +83,33 @@ watch(probeOutOfScope, async (v) => {
                             spellcheck="false" @beforeinput="validateBeforeInput" />
 
                         <div class="button-row" role="group">
-                            <Button label="Save Content Types" icon="fas fa-save" class="p-button-primary" @click="saveContentTypes" />
-                            <Button label="Reset Content Types" icon="fas fa-rotate-left" severity="secondary" @click="resetContentTypes" />
+                            <Button label="Save Content Types" icon="fas fa-save" class="p-button-primary"
+                                @click="saveContentTypes" />
+                            <Button label="Reset Content Types" icon="fas fa-rotate-left" severity="secondary"
+                                @click="resetContentTypes" />
                         </div>
-                </div>
-                <!--Toggle switches-->
-                <div class="w-1/2 space-y-3">
-                        <label>
-                            <ToggleSwitch v-model="probeOutOfScope" :disabled="!loaded" />
-                            <span class="text-sm">Probe out of scope requests</span>
-                        </label>
-                </div>
+                    </div>
+                    <!--Toggle switches-->
+                    <div class="w-1/2 space-y-3">
+                        <div class="flex flex-col gap-3">
+                            <div class="flex items-center gap-2">
+                                <ToggleSwitch v-model="probeOutOfScope" :disabled="!loaded" />
+                                <label class="text-sm cursor-pointer select-none">Probe out of scope requests</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <ToggleSwitch v-model="checkResponseHeaderReflections" :disabled="!loaded" />
+                                <label class="text-sm cursor-pointer select-none">Check for reflections in response headers</label>
+                            </div>
+                            <!--div class="flex items-center gap-2">
+                                <ToggleSwitch v-model="probeOutOfScope" :disabled="!loaded" />
+                                <label class="text-sm cursor-pointer select-none">Probe request header reflections</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <ToggleSwitch v-model="probeOutOfScope" :disabled="!loaded" />
+                                <label class="text-sm cursor-pointer select-none">Enable response header reflections</label>
+                            </div-->
+                        </div>
+                    </div>
                 </div>
             </div>
         </template>
@@ -94,30 +117,9 @@ watch(probeOutOfScope, async (v) => {
 </template>
 
 <style scoped>
-.settings-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    /* stack on small screens */
-    gap: 1.5rem;
-}
-
-@media (min-width: 768px) {
-
-    /* 50/50 from md+ */
-    .settings-grid {
-        grid-template-columns: 1fr 1fr;
-    }
-}
-
 .button-row {
     display: inline-flex;
     gap: 1rem;
     margin-top: .5rem;
-}
-
-.checkbox-row {
-    display: inline-flex;
-    align-items: center;
-    gap: .75rem;
 }
 </style>

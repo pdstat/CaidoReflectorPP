@@ -57,21 +57,3 @@ export const COMMON_ANALYTICS_HOSTS_SET = new Set(COMMON_ANALYTICS_HOSTS);
 
 export const COMMON_ANALYTICS_ENDPOINTS = ['/socket.io/'];
 export const COMMON_ANALYTICS_ENDPOINTS_SET = new Set(COMMON_ANALYTICS_ENDPOINTS);
-
-export const NO_SNIFF_CONTENT_TYPES = new Set([
-  'text/html',
-  'application/xhtml+xml',
-  'application/xml',
-  'text/xml',
-  'image/svg+xml',
-  'text/xsl',
-  'application/vnd.wap.xhtml+xml',
-  'multipart/x-mixed-replace',
-  'application/rdf+xml',
-  'application/rdf+xml',
-  'application/mathml+xml',
-  'text/vtt',
-  'text/cache-manifest',
-  'model/vnd.usdz+zip',
-  'video/mp2t'
-]);

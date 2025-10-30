@@ -23,6 +23,7 @@ const withTimeout: WithTimeout = (asyncOperation, timeoutMs) => {
 
 export type API = DefineAPI<{
     setProbeOutOfScope: (value: boolean) => Promise<void>;
+    setCheckResponseHeaderReflections: (value: boolean) => Promise<void>;
     setNoSniffContentTypes: (value: Set<string>) => Promise<void>;
 }>;
 
@@ -32,6 +33,9 @@ export function init(sdk: SDK<API>) {
     })
     sdk.api.register("setNoSniffContentTypes", async (_sdk, value: Set<string>) => {
         ConfigStore.setNoSniffContentTypes(value)
+    })
+    sdk.api.register("setCheckResponseHeaderReflections", async (_sdk, value: boolean) => {
+        ConfigStore.setCheckResponseHeaderReflections(value)
     })
     sdk.events.onInterceptResponse(async (sdk, request: Request, response: Response) => {
         const shouldProbe = ConfigStore.getProbeOutOfScopeRequests();

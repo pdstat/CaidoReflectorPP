@@ -4,6 +4,8 @@ export class ConfigStore {
 
     private _probeOutOfScopeRequests = false;
 
+    private _checkResponseHeaderReflections = true;
+
     private _noSniffContentTypes: Set<string> = new Set<string>();
 
     static getProbeOutOfScopeRequests(): boolean {
@@ -12,6 +14,14 @@ export class ConfigStore {
 
     static setProbeOutOfScopeRequests(value: boolean) {
         ConfigStore.instance._probeOutOfScopeRequests = value;
+    }
+
+    static getCheckResponseHeaderReflections(): boolean {
+        return ConfigStore.instance._checkResponseHeaderReflections;
+    }
+
+    static setCheckResponseHeaderReflections(value: boolean) {
+        ConfigStore.instance._checkResponseHeaderReflections = value;
     }
 
     static getNoSniffContentTypes(): Set<string> {

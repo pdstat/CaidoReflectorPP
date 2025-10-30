@@ -1,9 +1,9 @@
 import { NO_SNIFF_CONTENT_TYPES } from "./core/constants.js";
 import { StorageSDK } from "@caido/sdk-frontend/src/types/storage";
 import { FrontendSDK } from "@/types";
-import type { API } from "../../backend/src/index.ts";
 
 const PROBE_OOS_STORAGE_KEY = "probeOutOfScope"
+const CHECK_HEADER_REFLECTIONS_STORAGE_KEY = "checkResponseHeaderReflections"
 const CONTENT_TYPES_STORAGE_KEY = "noSniffContentTypes"
 
 export class PluginSettings {
@@ -45,6 +45,15 @@ export class PluginSettings {
     public async setProbeOutOfScope(value: boolean): Promise<void> {
         await this.sdk.backend.setProbeOutOfScope(value);
         return this.set<boolean>(PROBE_OOS_STORAGE_KEY, value);
+    }
+
+    public getCheckResponseHeaderReflections(): boolean {
+        return this.get<boolean>(CHECK_HEADER_REFLECTIONS_STORAGE_KEY, true);
+    }
+
+    public async setCheckResponseHeaderReflections(value: boolean): Promise<void> {
+        await this.sdk.backend.setCheckResponseHeaderReflections(value);
+        return this.set<boolean>(CHECK_HEADER_REFLECTIONS_STORAGE_KEY, value);
     }
 
     public getDefaultNoSniffContentTypes(): Set<string> {
