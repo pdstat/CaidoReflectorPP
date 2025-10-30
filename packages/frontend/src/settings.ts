@@ -80,7 +80,7 @@ export class PluginSettings {
     }
 
     public async setNoSniffContentTypes(value: Set<string>): Promise<void> {
-        await this.sdk.backend.setNoSniffContentTypes(value);
+        await this.sdk.backend.setNoSniffContentTypes(JSON.stringify(Array.from(value)));
         return this.set<Set<string>>(CONTENT_TYPES_STORAGE_KEY, value);
     }
 

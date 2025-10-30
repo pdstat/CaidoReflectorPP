@@ -36,7 +36,9 @@ export async function run(
     }
 
     const LOG_UNCONFIRMED_FINDINGS = ConfigStore.getLogUnconfirmedFindings();
-
+    const noSniffContentTypes = ConfigStore.getNoSniffContentTypes();
+    sdk.console.log(`[Reflector++] Starting scan (Log unconfirmed findings: ${LOG_UNCONFIRMED_FINDINGS ? "enabled" : "disabled"})`);
+    sdk.console.log(`[Reflector++] Starting scan (No-Sniff Content Types: ${Array.from(noSniffContentTypes).join(", ")})`);
     sdk.console.log("=====================================");
 
     // 1. Always attempt header reflection detection regardless of content-type gating unless disabled

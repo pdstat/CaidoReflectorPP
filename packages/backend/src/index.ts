@@ -32,8 +32,9 @@ export function init(sdk: SDK<API>) {
     sdk.api.register("setProbeOutOfScope", async (_sdk, value: boolean) => {
         ConfigStore.setProbeOutOfScopeRequests(value)
     })
-    sdk.api.register("setNoSniffContentTypes", async (_sdk, value: Set<string>) => {
-        ConfigStore.setNoSniffContentTypes(value)
+    sdk.api.register("setNoSniffContentTypes", async (_sdk, value: string) => {
+        const parsed = JSON.parse(value);
+        ConfigStore.setNoSniffContentTypes(new Set(parsed));
     })
     sdk.api.register("setCheckResponseHeaderReflections", async (_sdk, value: boolean) => {
         ConfigStore.setCheckResponseHeaderReflections(value)
@@ -44,7 +45,7 @@ export function init(sdk: SDK<API>) {
     sdk.events.onInterceptResponse(async (sdk, request: Request, response: Response) => {
         const shouldProbe = ConfigStore.getProbeOutOfScopeRequests();
         sdk.console.log(`Reflector++: shouldProbe=${shouldProbe}, inScope=${sdk.requests.inScope(request)}`);
-        if ((!sdk.requests.inScope(request) && shouldProbe) 
+        if ((!sdk.requests.inScope(request) && shouldProbe)
             || (sdk.requests.inScope(request))) {
             withTimeout(() => reflectorRun({ request, response }, sdk), 40_000);
         }

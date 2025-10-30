@@ -44,7 +44,13 @@ const resetContentTypes = async () => {
 
 onMounted(async () => {
     probeOutOfScope.value = settings.getProbeOutOfScope() === true
+    checkResponseHeaderReflections.value = settings.getCheckResponseHeaderReflections() === true
+    logUnconfirmedFindings.value = settings.getLogUnconfirmedFindings() === true
     noSniffContentTypes.value = Array.from(settings.getNoSniffContentTypes()).sort().join("\n")
+    settings.setCheckResponseHeaderReflections(checkResponseHeaderReflections.value)
+    settings.setLogUnconfirmedFindings(logUnconfirmedFindings.value)
+    settings.setProbeOutOfScope(probeOutOfScope.value)
+    settings.setNoSniffContentTypes(settings.getNoSniffContentTypes())
     loaded.value = true
 })
 
