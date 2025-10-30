@@ -1,4 +1,4 @@
-import { NO_SNIFF_CONTENT_TYPES } from '../core/constants.js';
+import { ConfigStore } from "../stores/configStore.js";
 
 // Build a canonical endpoint string. Some callers may pass a request wrapper that only exposes
 // toSpec(); in that case unwrap before reading connection details.
@@ -21,8 +21,9 @@ export const passesContentTypeGating = (
   let normalizedCT: string | undefined;
   if (Array.isArray(rawContentType)) normalizedCT = rawContentType.find(v => v && v.trim() !== '');
   else if (typeof rawContentType === 'string' && rawContentType.trim() !== '') normalizedCT = rawContentType;
+  const noSniffContentTypes = ConfigStore.getNoSniffContentTypes();
   const ctValue = normalizedCT?.split(';')[0].toLowerCase();
-  const htmlLike = !!ctValue && NO_SNIFF_CONTENT_TYPES.has(ctValue);
+  const htmlLike = !!ctValue && noSniffContentTypes.has(ctValue);
 
   let nosniffLower: string | undefined;
   if (Array.isArray(rawNoSniff)) nosniffLower = rawNoSniff.join(',').toLowerCase();

@@ -47,8 +47,22 @@ export class PluginSettings {
         return this.set<boolean>(PROBE_OOS_STORAGE_KEY, value);
     }
 
+    public getDefaultNoSniffContentTypes(): Set<string> {
+        return NO_SNIFF_CONTENT_TYPES;
+    }
+
     public getNoSniffContentTypes(): Set<string> {
-        return this.get<Set<string>>(CONTENT_TYPES_STORAGE_KEY, NO_SNIFF_CONTENT_TYPES);
+        const stored = this.get<Set<string>>(CONTENT_TYPES_STORAGE_KEY);
+        if (stored && stored.size > 0) {
+            return stored;
+        } else {
+            return this.getDefaultNoSniffContentTypes();
+        }
+    }
+
+    public async setNoSniffContentTypes(value: Set<string>): Promise<void> {
+        await this.sdk.backend.setNoSniffContentTypes(value);
+        return this.set<Set<string>>(CONTENT_TYPES_STORAGE_KEY, value);
     }
 
 };
