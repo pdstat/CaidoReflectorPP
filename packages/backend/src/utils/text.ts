@@ -7,19 +7,62 @@ export const randomValue = (length = 8): string => {
   return out;
 };
 
-export const findMatches = (text: string | undefined, substring: string): Array<[number, number]> => {
-  if (!text) return [];
-  const matches: Array<[number, number]> = [];
+const containsUrlEncodedValues = (str: unknown): boolean => {
+  if (typeof str !== 'string' || str.length === 0) return false;
+  // case-insensitive: handles %2a, %2A, etc.
+  return /%[0-9A-F]{2}/i.test(str);
+};
+
+const findAll = (text: string, needle: string): Array<[number, number]> => {
+  const out: Array<[number, number]> = [];
+  if (needle.length === 0) return out;
+
   let startIndex = 0;
   while (true) {
-    const start = text.indexOf(substring, startIndex);
+    const start = text.indexOf(needle, startIndex);
     if (start === -1) break;
-    const end = start + substring.length;
-    matches.push([start, end]);
-    startIndex = end;
+    const end = start + needle.length;
+    out.push([start, end]);
+    startIndex = end; // non-overlapping, same behavior as your original
   }
-  return matches;
+  return out;
 };
+
+export const findMatches = (text: string | undefined, substring: string, sdk?: SDK): Array<[number, number]> => {
+  if (!text) return [];
+
+  // 1) literal match
+  const literalMatches = findAll(text, substring);
+  if (literalMatches.length > 0) return literalMatches;
+
+  // If it doesn't look URL-encoded at all, we're done.
+  if (!containsUrlEncodedValues(substring)) return [];
+
+  sdk.console.log(`[Reflector++] No literal matches for "${substring}", trying URL-decoded variants`);
+  // 2) decode once, try again
+  let onceDecoded: string | null = null;
+  try {
+    onceDecoded = decodeURIComponent(substring);
+  } catch {
+    // malformed percent-encoding; nothing more to do
+    return [];
+  }
+
+  const onceDecodedMatches = findAll(text, onceDecoded);
+  if (onceDecodedMatches.length > 0) return onceDecodedMatches;
+
+  // 3) decode twice (handle double-encoded inputs), try again
+  try {
+    const twiceDecoded = decodeURIComponent(onceDecoded);
+    const twiceDecodedMatches = findAll(text, twiceDecoded);
+    if (twiceDecodedMatches.length > 0) return twiceDecodedMatches;
+  } catch {
+    // second decode failed; fall through to empty result
+  }
+
+  return [];
+};
+
 
 export function encVariants(raw: string): { url: string; html: string; jsUniPieces: string[] } {
   const url = encodeURIComponent(raw);
