@@ -37,7 +37,6 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<
   [input, requestParameters] = await modifyAmbiguousParameters(sdk as any, input, requestParameters);
 
   const reflectedParameters: ReflectedParameter[] = [];
-
   for (const param of requestParameters) {
     if (!param.value) continue;
     const errorParamStore = errorParamsStore.get();

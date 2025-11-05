@@ -250,6 +250,7 @@ const ResponseBodyPayloadGenerator = class {
 		suffix: string
 	): Array<{ char: string; context: string }> {
 		const res: Array<{ char: string; context: string }> = [];
+		sdk.console.log(`[Reflector++] Detecting payload: prefix=${JSON.stringify(prefix)} payload=${JSON.stringify(payload)} suffix=${JSON.stringify(suffix)} in contexts: ${context.context.join(", ")}`);
 		// Maintain original ordering – each helper may append to results.
 		this._detectAttributeQuotePayload(sdk, context, prefix, payload, suffix, res);
 		this._detectJsInQuote(sdk, context, prefix, payload, suffix, res);
@@ -612,6 +613,7 @@ const ResponseBodyPayloadGenerator = class {
 		const payloadSet = new Set<string>();
 		const contextSet = new Set<string>();
 		this._walkNodes(this.root as any, (node: any) => {
+			sdk.console.log(`[Reflector++] Examining node: type=${node?.nodeType} tag=${node?.rawTagName || "<none>"}`);
 			// Order matters; each helper returns true if it handled the node fully.
 			if (this._handleElementStructural(node, reflectedValue, payloadSet, contextSet, sdk)) return;
 			if (this._handleTextNode(node, reflectedValue, payloadSet, contextSet, sdk)) return;

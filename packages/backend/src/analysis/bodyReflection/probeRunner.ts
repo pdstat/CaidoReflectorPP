@@ -56,8 +56,10 @@ export async function runProbes(
             const probeBody = probe.response.getBody()?.toText() || '';
             const detectPg = new ResponseBodyPayloadGenerator(probeBody);
             for (const m of markers) {
+                sdk.console.log(`[Reflector++] Analyzing probe results for marker "${m.ch}"`);
                 const needle = m.pre + encodeURIComponent(m.ch) + m.suf;
-                if (probeBody.indexOf(needle) === -1) continue;
+                sdk.console.log(`[Reflector++] Looking for needle: ${needle}`);
+                if (findMatches(probeBody, needle, sdk).length === 0) continue;
                 const detections = detectPg.detect({ console: (sdk as any).console }, { context: contextInfo.context }, m.pre, m.ch, m.suf);
                 if (detections.length > 0) {
                     confirmed = true;
