@@ -50,16 +50,16 @@ export async function runProbes(
             }
             if (probe.response.getCode?.() === baselineCode) {
                 const probeBodyStable = probe.response.getBody()?.toText() || '';
-                const probeSig = KEY_WORDS_LOCAL.map(k => findMatches(probeBodyStable, k).length).join(',');
+                const probeSig = KEY_WORDS_LOCAL.map(k => findMatches(probeBodyStable, k, true, sdk).length).join(',');
                 if (probeSig === baselineSig) probeWasStable = true;
             }
             const probeBody = probe.response.getBody()?.toText() || '';
             const detectPg = new ResponseBodyPayloadGenerator(probeBody);
             for (const m of markers) {
-                sdk.console.log(`[Reflector++] Analyzing probe results for marker "${m.ch}"`);
+                sdk.console.log(`[Reflector++] Analysing probe results for marker "${m.ch}"`);
                 const needle = m.pre + encodeURIComponent(m.ch) + m.suf;
                 sdk.console.log(`[Reflector++] Looking for needle: ${needle}`);
-                if (findMatches(probeBody, needle, sdk).length === 0) continue;
+                if (findMatches(probeBody, needle, true, sdk).length === 0) continue;
                 const detections = detectPg.detect({ console: (sdk as any).console }, { context: contextInfo.context }, m.pre, m.ch, m.suf);
                 if (detections.length > 0) {
                     confirmed = true;

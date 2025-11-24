@@ -28,17 +28,23 @@ const findAll = (text: string, needle: string): Array<[number, number]> => {
   return out;
 };
 
-export const findMatches = (text: string | undefined, substring: string, sdk?: SDK): Array<[number, number]> => {
+export const findMatches = (text: string | undefined, substring: string, fromProbe=false, sdk?: SDK): Array<[number, number]> => {
   if (!text) return [];
 
   // 1) literal match
   const literalMatches = findAll(text, substring);
   if (literalMatches.length > 0) return literalMatches;
 
+  // If trying to find matches from a probe, no need to try decoding
+  if (fromProbe) return [];
+
   // If it doesn't look URL-encoded at all, we're done.
   if (!containsUrlEncodedValues(substring)) return [];
 
-  sdk.console.log(`[Reflector++] No literal matches for "${substring}", trying URL-decoded variants`);
+  if (sdk) {
+    sdk.console.log(`[Reflector++] No literal matches for "${substring}", trying URL-decoded variants`);
+  }
+  
   // 2) decode once, try again
   let onceDecoded: string | null = null;
   try {

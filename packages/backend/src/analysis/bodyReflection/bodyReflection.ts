@@ -47,7 +47,7 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<
     sdk.console.log('-------');
     sdk.console.log(`[Reflector++] Checking parameter "${param.key}" (source: ${param.source}, value: "${param.value}")`);
 
-    let baselineMatches = findMatches(bodyText, param.value, sdk);
+    let baselineMatches = findMatches(bodyText, param.value, false, sdk);
     if (baselineMatches.length === 0) {
       if (detectEncodedOnly(sdk, input, param.key, param.source, param.value, bodyText)) {
         // only encoded signal, skip literal processing

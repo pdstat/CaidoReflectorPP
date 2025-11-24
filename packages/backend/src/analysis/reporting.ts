@@ -88,19 +88,19 @@ export function generateReport(param: ReportReflectedParameter): string {
       if (ch === " ") {
         shown = "'space'";
       } else if (ch === "'") {
-        shown = `"'"`;
+        shown = `' (single quote)`;
       } else if (ch === '"') {
-        shown = `'"'`;
+        shown = `" (double quote)`;
       } else if (ch === "`") {
-        shown =  "'`'";
+        shown =  "` (backtick)";
       } else if (ch === "\\") {
-        shown = "'\\'";
+        shown = "\\";
       } else if (ch === "<") {
-        shown = "'<'";
+        shown = "<";
       } else if (ch === ">") {
-        shown = "'>'";
+        shown = ">";
       } else if (ch === "/") {
-        shown = "'/'";
+        shown = "/";
       } else if (ch === "") {
         shown = "alphanumeric";
       } else {

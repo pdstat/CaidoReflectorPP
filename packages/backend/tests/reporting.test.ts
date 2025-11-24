@@ -60,13 +60,15 @@ describe("generateReport", () => {
     expect(out).toContain('- Base: +30');
     expect(out).toContain('- Context base (attributeEscaped): +22');
     expect(out).toContain('- Escaped context penalty: -18');
-  // Aggressive characters formatting: current implementation prints:
-  // - blank entry as 'alphanumeric'
-  // - other chars wrapped in single quotes (special cases for quotes/backticks)
+  // Aggressive characters formatting: current implementation prints raw bullets like
+  // - alphanumeric
+  // - <
+  // - " (double quote)
+  // - ` (backtick)
   expect(out).toContain("alphanumeric");
-  expect(out).toContain("'<'");
-  expect(out).toContain("'\"'");
-  expect(out).toContain("'`'");
+  expect(out).toContain("<");
+  expect(out).toContain("\" (double quote)");
+  expect(out).toContain("` (backtick)");
     // Trailing newline
     expect(out.endsWith("\n"));
   });

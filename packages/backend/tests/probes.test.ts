@@ -1,5 +1,6 @@
 import { sendProbe, modifyAmbiguousParameters } from "../src/analysis/bodyReflection/probes.js";
 import { RequestParameter } from "../src/core/types.js";
+import { ConfigStore } from "../src/stores/configStore.js";
 
 // Helper to craft a minimal request spec with mutable query/cookie/body
 function makeRequestSpec(opts: { query?: string; cookie?: string; body?: string }) {
@@ -29,6 +30,17 @@ function makeResponse(body: string, code = 200) {
     getHeader: (h: string) => (h === "Content-Type" ? "text/html" : undefined)
   };
 }
+
+let originalNoSniff: Set<string>;
+
+beforeAll(() => {
+  originalNoSniff = new Set(ConfigStore.getNoSniffContentTypes());
+  ConfigStore.setNoSniffContentTypes(new Set(["text/html", "application/xhtml+xml"]));
+});
+
+afterAll(() => {
+  ConfigStore.setNoSniffContentTypes(new Set(originalNoSniff));
+});
 
 describe("sendProbe", () => {
   test("mutates URL, Cookie, and Body parameters", async () => {

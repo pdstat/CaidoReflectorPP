@@ -1,6 +1,10 @@
 import { buildEndpoint } from '../src/utils/http.js';
 import { passesContentTypeGating } from '../src/utils/http.js';
 
+import { ConfigStore } from "../src/stores/configStore.js";
+
+let originalNoSniff: Set<string>;
+
 describe('buildEndpoint', () => {
     // Add a test for building the http endpoint
     it('should build correct HTTP endpoint', () => {
@@ -26,6 +30,15 @@ describe('buildEndpoint', () => {
 });
 
 describe('passesContentTypeGating', () => {
+    beforeAll(() => {
+        originalNoSniff = new Set(ConfigStore.getNoSniffContentTypes());
+        ConfigStore.setNoSniffContentTypes(new Set(["text/html", "application/xhtml+xml"]));
+    });
+
+    afterAll(() => {
+        ConfigStore.setNoSniffContentTypes(new Set(originalNoSniff));
+    });
+
     test('returns true for explicit html content-type', () => {
         expect(passesContentTypeGating('text/html; charset=UTF-8', undefined)).toBe(true);
     });

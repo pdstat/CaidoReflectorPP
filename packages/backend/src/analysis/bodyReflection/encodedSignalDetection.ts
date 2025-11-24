@@ -16,11 +16,18 @@ export function detectEncodedOnly(
     bodyText: string
 ): boolean { // returns true if encoded-only signal recorded
     const { url, html, jsUniPieces } = encVariants(paramValue);
-    const urlHitCount = findMatches(bodyText, url).length;
-    const htmlHitCount = findMatches(bodyText, html).length;
+    const urlHitCount = findMatches(bodyText, url, false, sdk).length;
+    const htmlHitCount = findMatches(bodyText, html, false, sdk).length;
     let jsonUniHitCount = 0;
     const jsonScriptRegex = /<script[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
-    let m: RegExpExecArray | null; while ((m = jsonScriptRegex.exec(bodyText)) !== null) { const txt = m[1] || ""; for (const piece of jsUniPieces) { if (txt.includes(piece)) jsonUniHitCount++; } }
+    let m: RegExpExecArray | null;
+    while ((m = jsonScriptRegex.exec(bodyText)) !== null) { 
+        const txt = m[1] || "";
+        for (const piece of jsUniPieces) { 
+            if (findMatches(txt, piece, false, sdk).length > 0) 
+                jsonUniHitCount++;
+        }
+    }
     if (urlHitCount || htmlHitCount || jsonUniHitCount) {
         const contexts: string[] = []; const evidence: string[] = [];
         if (urlHitCount) {

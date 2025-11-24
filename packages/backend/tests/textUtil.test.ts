@@ -22,20 +22,20 @@ describe('text utilities', () => {
 
   describe('findMatches', () => {
     test('finds non-overlapping sequential matches', () => {
-      const res = findMatches('abc xx abc yy abc', 'abc');
+      const res = findMatches('abc xx abc yy abc', 'abc', false);
       expect(res).toEqual([[0,3],[7,10],[14,17]]);
     });
 
     test('returns empty when substring absent', () => {
-      expect(findMatches('abcdef', 'zzz')).toEqual([]);
+      expect(findMatches('abcdef', 'zzz', false)).toEqual([]);
     });
 
     test('returns empty when text undefined', () => {
-      expect(findMatches(undefined, 'a')).toEqual([]);
+      expect(findMatches(undefined, 'a', false)).toEqual([]);
     });
 
     test('handles single-character repeated pattern', () => {
-      const res = findMatches('aaaa', 'a');
+      const res = findMatches('aaaa', 'a', false);
       expect(res).toEqual([[0,1],[1,2],[2,3],[3,4]]);
     });
   });

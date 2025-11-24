@@ -1,5 +1,6 @@
 import { runProbes } from "../src/analysis/bodyReflection/probeRunner.js";
 import { findMatches } from "../src/utils/text.js";
+import { ConfigStore } from "../src/stores/configStore.js";
 
 // Mock randomValue so we get deterministic pre/suf wrappers (length param respected)
 jest.mock("../src/utils/text.js", () => {
@@ -38,9 +39,9 @@ function buildRequestSpec(initialQuery = "p=orig") {
   return {
     getQuery: () => currentQuery,
     setQuery: (q: string) => { currentQuery = q; },
-    getBody: () => null,
+    getBody: (): null => null,
     setBody: (_: string) => { /* noop */ },
-    getHeader: (_: string) => undefined
+    getHeader: (_: string): undefined => undefined
   };
 }
 
@@ -59,6 +60,17 @@ function buildResponse(body: string, code = 200, ct = "text/html") {
     getBody: () => ({ toText: () => body })
   };
 }
+
+let originalNoSniff: Set<string>;
+
+beforeAll(() => {
+  originalNoSniff = new Set(ConfigStore.getNoSniffContentTypes());
+  ConfigStore.setNoSniffContentTypes(new Set(["text/html", "application/xhtml+xml"]));
+});
+
+afterAll(() => {
+  ConfigStore.setNoSniffContentTypes(new Set(originalNoSniff));
+});
 
 describe("runProbes()", () => {
   const KEY_WORDS_LOCAL = ["abc"]; // keep simple for stability signature
@@ -86,7 +98,7 @@ describe("runProbes()", () => {
     mockDetectImpl = (pre, ch, suf, body) => body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'html', char: ch }] : [];
 
     const baselineBody = "abc"; // contains KEY_WORD for baselineSig
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k).length).join(',');
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
 
     const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + responseBodyNeedle('<')) }));
@@ -112,7 +124,7 @@ describe("runProbes()", () => {
   test("Best context upgraded from html to jsInQuote (no successful chars due to gating)", async () => {
     mockDetectImpl = (pre, ch, suf, body) => body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'jsInQuote', char: ch }] : [];
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k).length).join(',');
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + responseBodyNeedle('/')) }));
 
@@ -136,7 +148,7 @@ describe("runProbes()", () => {
   test("Batching: second batch without reflections does not add chars", async () => {
     mockDetectImpl = (pre, ch, suf, body) => body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'html', char: ch }] : [];
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k).length).join(',');
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const firstBatch = ['a','b','c','d','e','f','g','h']; // 8 chars
     const secondBatch = ['i'];
     const allPayload = [...firstBatch, ...secondBatch];

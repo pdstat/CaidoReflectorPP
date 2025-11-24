@@ -2,6 +2,8 @@ export class ConfigStore {
 
     public static readonly instance = new ConfigStore();
 
+    private _passiveReflectionsOnly = false;
+
     private _probeOutOfScopeRequests = false;
 
     private _logUnconfirmedFindings = false;
@@ -40,6 +42,14 @@ export class ConfigStore {
 
     static setNoSniffContentTypes(value: Set<string>) {
         ConfigStore.instance._noSniffContentTypes = value;
+    }
+
+    static getPassiveReflectionsOnly(): boolean {
+        return ConfigStore.instance._passiveReflectionsOnly;
+    }
+
+    static setPassiveReflectionsOnly(value: boolean) {
+        ConfigStore.instance._passiveReflectionsOnly = value;
     }
 
     constructor() {

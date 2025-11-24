@@ -19,6 +19,7 @@ module.exports = {
     '^../../utils/params\\.js$': '<rootDir>/src/utils/params.ts',
     '^../utils/params\\.js$': '<rootDir>/src/utils/params.ts',
   '^../stores/paramStore\.js$': '<rootDir>/src/stores/paramStore.ts',
+  '^../stores/configStore\\.js$': '<rootDir>/src/stores/configStore.ts',
   '^../core/types\.js$': '<rootDir>/src/core/types.ts',
   '^../../payload/payloadGenerator\\.js$': '<rootDir>/src/payload/payloadGenerator.ts',
   '^./context\\.js$': '<rootDir>/src/analysis/bodyReflection/context.ts',
