@@ -95,4 +95,31 @@ describe("checkBodyReflections (expanded)", () => {
         const out = await checkBodyReflections({ request: baseRequest('', { cookies: `sid=${value}; theme=dark` }), response: makeResponse(html) }, makeSdk());
         expect(Array.isArray(out)).toBe(true);
     });
+
+    test("JSON body reflections run through the JSON generator", async () => {
+        const generateMock = jest.fn((sdk: any, value: string) => ({ context: ["jsonString"], payload: ["\""] }));
+        await new Promise<void>((resolve, reject) => {
+            jest.isolateModules(() => {
+                jest.doMock("../src/payload/jsonResponseBodyPayloadGenerator.ts", () => {
+                    return {
+                        __esModule: true,
+                        default: class {
+                            constructor(_body: string) {}
+                            generate(sdk: any, value: string) {
+                                return generateMock(sdk, value);
+                            }
+                        }
+                    };
+                });
+                const { checkBodyReflections: checkJsonBodyReflections } = require("../src/analysis/bodyReflection/bodyReflection.js");
+                const value = "jsonVal";
+                const json = `{"key":"${value}"}`;
+                checkJsonBodyReflections(
+                    { request: baseRequest(`p=${value}`), response: makeResponse(json, { headers: { 'Content-Type': 'application/json' } }) },
+                    makeSdk()
+                ).then(resolve).catch(reject);
+            });
+        });
+        expect(generateMock).toHaveBeenCalledWith(expect.anything(), "jsonVal");
+    });
 });

@@ -4,6 +4,7 @@
 export type CanonicalContext =
   | 'js' | 'jsInQuote'
   | 'css' | 'cssInQuote'
+  | 'jsonString' | 'jsonStructure'
   | 'eventHandler' | 'eventHandlerEscaped'
   | 'attribute' | 'attributeInQuote' | 'attributeEscaped'
   | 'html' | 'htmlComment'
@@ -23,6 +24,8 @@ export const CONTEXT = Object.freeze({
   ATTRIBUTE_ESCAPED: 'attributeEscaped' as CanonicalContext,
   HTML: 'html' as CanonicalContext,
   HTML_COMMENT: 'htmlComment' as CanonicalContext,
+  JSON_STRING: 'jsonString' as CanonicalContext,
+  JSON_STRUCTURE: 'jsonStructure' as CanonicalContext,
   JSON_ESCAPED: 'jsonEscaped' as CanonicalContext,
   RESPONSE_HEADER: 'responseHeader' as CanonicalContext,
 });
@@ -34,17 +37,20 @@ const ALIASES: Record<string, CanonicalContext> = {
   'style': 'css',
   'style string': 'cssInQuote',
   'response header': 'responseHeader',
-  'tag attribute (\") value': 'attributeInQuote',
+  'tag attribute (") value': 'attributeInQuote',
   "tag attribute (') value": 'attributeInQuote',
   'html': 'html',
-  'html comment': 'htmlComment'
+  'html comment': 'htmlComment',
+  'json string': 'jsonString',
+  'json structure': 'jsonStructure',
 };
 
 // Accept set for direct canonical names (lowercase form)
 const CANONICAL_SET = new Set<CanonicalContext>([
   'js','jsInQuote','css','cssInQuote','eventHandler',
   'eventHandlerEscaped','attribute','attributeInQuote',
-  'attributeEscaped','html','htmlComment','jsonEscaped','responseHeader'
+  'attributeEscaped','html','htmlComment','jsonEscaped','responseHeader',
+  'jsonString','jsonStructure'
 ]);
 
 export function toCanonical(raw?: string): CanonicalContext | undefined {
@@ -83,6 +89,8 @@ export function prettyPrintContext(raw?: string): string | undefined {
     case 'attributeInQuote': return 'Tag Attribute (quoted) Value';
     case 'attributeEscaped': return 'Tag Attribute (encoded)';
     case 'jsonEscaped': return 'Script (JSON block, \\uXXXX)';
+    case 'jsonString': return 'JSON String';
+    case 'jsonStructure': return 'JSON Structure';
     case 'html': return 'HTML';
     case 'htmlComment': return 'HTML Comment';
     case 'responseHeader': return 'Response Header';

@@ -11,8 +11,9 @@ jest.mock("../src/utils/text.js", () => {
   };
 });
 
-// Provide a programmable mock for PayloadGenerator.detect
-let mockDetectImpl: (pre: string, ch: string, suf: string, body: string) => any[] = () => [];
+// Provide a programmable mock for each payload generator
+let mockDetectImpl = jest.fn((pre: string, ch: string, suf: string, body: string) => []);
+let jsonDetectImpl = jest.fn((pre: string, ch: string, suf: string, body: string) => []);
 jest.mock("../src/payload/responseBodyPayloadGenerator.js", () => {
   return {
     __esModule: true,
@@ -21,6 +22,18 @@ jest.mock("../src/payload/responseBodyPayloadGenerator.js", () => {
       constructor(body: string) { this.body = body; }
       detect(_sdk: any, _opts: any, pre: string, ch: string, suf: string) {
         return mockDetectImpl(pre, ch, suf, this.body);
+      }
+    }
+  };
+});
+jest.mock("../src/payload/jsonResponseBodyPayloadGenerator.js", () => {
+  return {
+    __esModule: true,
+    default: class MockJsonPayloadGenerator {
+      body: string;
+      constructor(body: string) { this.body = body; }
+      detect(_sdk: any, _opts: any, pre: string, ch: string, suf: string) {
+        return jsonDetectImpl(pre, ch, suf, this.body);
       }
     }
   };
@@ -65,11 +78,18 @@ let originalNoSniff: Set<string>;
 
 beforeAll(() => {
   originalNoSniff = new Set(ConfigStore.getNoSniffContentTypes());
-  ConfigStore.setNoSniffContentTypes(new Set(["text/html", "application/xhtml+xml"]));
+  ConfigStore.setNoSniffContentTypes(new Set(["text/html", "application/xhtml+xml", "application/json"]));
 });
 
 afterAll(() => {
   ConfigStore.setNoSniffContentTypes(new Set(originalNoSniff));
+});
+
+beforeEach(() => {
+  mockDetectImpl.mockReset();
+  mockDetectImpl.mockImplementation((pre: string, ch: string, suf: string, body: string) => []);
+  jsonDetectImpl.mockReset();
+  jsonDetectImpl.mockImplementation((pre: string, ch: string, suf: string, body: string) => []);
 });
 
 describe("runProbes()", () => {
@@ -95,7 +115,9 @@ describe("runProbes()", () => {
 
   test("Single batch success adds successful char, sets confirmed and stability", async () => {
     // Detection returns literal 'html' context so char qualifies as successful
-    mockDetectImpl = (pre, ch, suf, body) => body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'html', char: ch }] : [];
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'html', char: ch }] : []
+    );
 
     const baselineBody = "abc"; // contains KEY_WORD for baselineSig
     const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
@@ -107,7 +129,7 @@ describe("runProbes()", () => {
       sdk,
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
-      { context: ["html"], payload: ["<"] },
+      { context: ["jsonString"], payload: ["<"] },
       [],
       200,
       baselineSig,
@@ -122,7 +144,9 @@ describe("runProbes()", () => {
   });
 
   test("Best context upgraded from html to jsInQuote (no successful chars due to gating)", async () => {
-    mockDetectImpl = (pre, ch, suf, body) => body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'jsInQuote', char: ch }] : [];
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'jsInQuote', char: ch }] : []
+    );
     const baselineBody = "abc";
     const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
@@ -146,7 +170,9 @@ describe("runProbes()", () => {
   });
 
   test("Batching: second batch without reflections does not add chars", async () => {
-    mockDetectImpl = (pre, ch, suf, body) => body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'html', char: ch }] : [];
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'html', char: ch }] : []
+    );
     const baselineBody = "abc";
     const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const firstBatch = ['a','b','c','d','e','f','g','h']; // 8 chars
@@ -179,5 +205,33 @@ describe("runProbes()", () => {
     expect(new Set(firstBatch).size).toBe(8);
     for (const ch of firstBatch) expect(result.successfulChars.has(ch)).toBe(true);
     expect(result.successfulChars.has('i')).toBe(false);
+  });
+
+  test("JSON responses use JsonResponseBodyPayloadGenerator", async () => {
+    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    mockDetectImpl.mockImplementation(() => []);
+    jsonDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'jsonString', char: ch }] : []
+    );
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + responseBodyNeedle('<'), 200, 'application/json') }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["html"], payload: ["<"] },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "html"
+    );
+
+    expect(result.bestContext).toBe("jsonString");
+    expect(jsonDetectImpl).toHaveBeenCalled();
+    expect(mockDetectImpl).not.toHaveBeenCalled();
   });
 });

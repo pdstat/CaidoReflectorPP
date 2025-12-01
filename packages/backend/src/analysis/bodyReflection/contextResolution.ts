@@ -14,8 +14,10 @@ export function resolveBestContext(
         const ctxArr = contextInfo?.context ?? [];
         if (ctxArr.includes('jsInQuote')) bestContext = 'Script String (")';
         else if (ctxArr.includes('js')) bestContext = 'Script';
+        else if (ctxArr.includes('jsonString')) bestContext = 'JSON String';
         else if (ctxArr.includes('cssInQuote')) bestContext = 'Style String (")';
         else if (ctxArr.includes('css')) bestContext = 'Style';
+        else if (ctxArr.includes('jsonStructure')) bestContext = 'JSON Structure';
         else if (ctxArr.includes('eventHandler')) bestContext = 'Event Handler Attribute';
         else if (ctxArr.includes('attributeInQuote')) bestContext = 'Tag Attribute (quoted) Value';
         else if (ctxArr.includes('attribute')) bestContext = 'Tag Attribute (unquoted) Value';

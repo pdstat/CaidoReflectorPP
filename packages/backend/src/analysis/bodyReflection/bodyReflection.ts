@@ -6,6 +6,7 @@ import { buildEndpoint } from "../../utils/http.js";
 import { enumerateRequestParameters } from "../../utils/params.js";
 import { KEY_WORDS } from "../../core/constants.js";
 import { scoreFinding } from "../scoring.js";
+import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
 import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 import { getTags } from "./context.js";
 import { modifyAmbiguousParameters } from "./probes.js"; // compiled extension form
@@ -27,7 +28,14 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<
   sdk.console.log("[Reflector++] Checking parameters for reflection (payload-based)...");
   const bodyText = response.getBody()?.toText() || "";
   const tags = getTags(bodyText);
-  const payloadGenerator = new ResponseBodyPayloadGenerator(bodyText);
+  const rawContentType = response.getHeader?.("Content-Type");
+  const normalizedType = Array.isArray(rawContentType)
+    ? rawContentType.find((v) => v && v.trim() !== "")
+    : typeof rawContentType === "string" && rawContentType.trim() !== "" ? rawContentType : undefined;
+  const isJsonResponse = normalizedType?.toLowerCase().split(";")[0] === "application/json";
+  const payloadGenerator = isJsonResponse
+    ? new JsonResponseBodyPayloadGenerator(bodyText)
+    : new ResponseBodyPayloadGenerator(bodyText);
   const baselineCode = response.getCode();
   const baselineBody = bodyText;
   const baselineSig = computeKeywordCounts(baselineBody, KEY_WORDS).join(",");

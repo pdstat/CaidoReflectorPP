@@ -20,6 +20,8 @@ describe("contextMap.toCanonical", () => {
     ["jsonEscaped", "jsonEscaped"],
     ["HTML", "html"],
     ["html comment", "htmlComment"],
+    ["json string", "jsonString"],
+    ["JSON Structure", "jsonStructure"],
   ];
   test.each(cases)("%s → %s", (input, expected) => {
     expect(toCanonical(input)).toBe(expected);
@@ -59,6 +61,8 @@ describe("contextMap.prettyPrintContext", () => {
     ["jsonEscaped", "Script (JSON block, \\uXXXX)"],
     ["html", "HTML"],
     ["htmlcomment", "HTML Comment"],
+    ["jsonString", "JSON String"],
+    ["jsonStructure", "JSON Structure"],
     ["responseHeader", "Response Header"],
   ];
   test.each(prettyPairs)("%s → %s", (raw, expected) => {

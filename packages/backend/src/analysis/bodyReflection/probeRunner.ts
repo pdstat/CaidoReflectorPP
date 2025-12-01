@@ -6,6 +6,7 @@ import { randomValue, findMatches } from "../../utils/text.js";
 import { mutateParamValue } from "../../utils/query.js";
 import { passesContentTypeGating } from "../../utils/http.js";
 import { allowedDetectionContextsFor, isLiteralContext } from "../../utils/contexts.js";
+import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
 import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 
 export interface ProbeResult {
@@ -54,12 +55,22 @@ export async function runProbes(
                 if (probeSig === baselineSig) probeWasStable = true;
             }
             const probeBody = probe.response.getBody()?.toText() || '';
-            const detectPg = new ResponseBodyPayloadGenerator(probeBody);
+            const normalizedContentType = Array.isArray(ctHeader)
+                ? ctHeader.find((value) => value && value.trim() !== "")
+                : typeof ctHeader === "string" && ctHeader.trim() !== "" ? ctHeader : "";
+            const contentType = normalizedContentType.toLowerCase();
+            const isJsonResponse = contentType.startsWith("application/json");
+            const detectPg = isJsonResponse
+                ? new JsonResponseBodyPayloadGenerator(probeBody)
+                : new ResponseBodyPayloadGenerator(probeBody);
             for (const m of markers) {
                 sdk.console.log(`[Reflector++] Analysing probe results for marker "${m.ch}"`);
-                const needle = m.pre + encodeURIComponent(m.ch) + m.suf;
-                sdk.console.log(`[Reflector++] Looking for needle: ${needle}`);
-                if (findMatches(probeBody, needle, true, sdk).length === 0) continue;
+                const encodedNeedle = m.pre + encodeURIComponent(m.ch) + m.suf;
+                const decodedNeedle = m.pre + m.ch + m.suf;
+                sdk.console.log(`[Reflector++] Looking for needle: ${encodedNeedle} in probe body ${probeBody.substring(0, 100)}...`);
+                const foundEncoded = findMatches(probeBody, encodedNeedle, true, sdk).length > 0;
+                const foundDecoded = isJsonResponse && findMatches(probeBody, decodedNeedle, true, sdk).length > 0;
+                if (!foundEncoded && !foundDecoded) continue;
                 const detections = detectPg.detect({ console: (sdk as any).console }, { context: contextInfo.context }, m.pre, m.ch, m.suf);
                 if (detections.length > 0) {
                     confirmed = true;

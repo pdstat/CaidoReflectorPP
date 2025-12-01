@@ -10,6 +10,7 @@ export const NO_SNIFF_CONTENT_TYPES = new Set([
   'application/rdf+xml',
   'application/rdf+xml',
   'application/mathml+xml',
+  'application/json',
   'text/vtt',
   'text/cache-manifest',
   'model/vnd.usdz+zip',
