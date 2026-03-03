@@ -15,6 +15,7 @@ export interface ReflectedParameter {
 
 // Extended analyzed reflected parameter including optional scoring metadata.
 export interface AnalyzedReflectedParameter extends ReflectedParameter {
+  confirmed?: boolean;
   confidence?: number;
   severity?: number;
   score?: number; // alias; some callers used 'score' alongside 'certainty'

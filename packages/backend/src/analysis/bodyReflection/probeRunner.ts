@@ -11,6 +11,7 @@ import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGener
 
 export interface ProbeResult {
     confirmed: boolean;
+    reflected: boolean;
     successfulChars: Set<string>;
     bestContext: string;
     probeWasStable: boolean;
@@ -29,9 +30,9 @@ export async function runProbes(
     initialBestContext: string
 ): Promise<ProbeResult> {
     const successfulChars = new Set<string>();
-    let confirmed = false; let probeWasStable = false; let bestContext = initialBestContext;
+    let confirmed = false; let reflected = false; let probeWasStable = false; let bestContext = initialBestContext;
     if (!contextInfo || !Array.isArray(contextInfo.payload) || contextInfo.payload.length === 0) {
-        return { confirmed: false, successfulChars, bestContext, probeWasStable };
+        return { confirmed: false, reflected: false, successfulChars, bestContext, probeWasStable };
     }
     const BATCH = 8;
     for (let i = 0; i < contextInfo.payload.length; i += BATCH) {
@@ -71,6 +72,7 @@ export async function runProbes(
                 const foundEncoded = findMatches(probeBody, encodedNeedle, true, sdk).length > 0;
                 const foundDecoded = isJsonResponse && findMatches(probeBody, decodedNeedle, true, sdk).length > 0;
                 if (!foundEncoded && !foundDecoded) continue;
+                reflected = true;
                 const detections = detectPg.detect({ console: (sdk as any).console }, { context: contextInfo.context }, m.pre, m.ch, m.suf);
                 if (detections.length > 0) {
                     confirmed = true;
@@ -85,5 +87,5 @@ export async function runProbes(
             }
         } catch (e) { (sdk as any).console.log(`[Reflector++] Probe error for ${param.key}: ${e}`); }
     }
-    return { confirmed, successfulChars, bestContext, probeWasStable };
+    return { confirmed, reflected, successfulChars, bestContext, probeWasStable };
 }

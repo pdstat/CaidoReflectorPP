@@ -62,7 +62,7 @@ export async function run(
     if (!proceedBody) {
         sdk.console.log("[Reflector++] Body reflection scan skipped due to gating checks; header results retained.");
     } else {
-    bodyReflections = await checkBodyReflections(input, sdk);
+    bodyReflections = await checkBodyReflections(input, sdk, LOG_UNCONFIRMED_FINDINGS);
     }
 
     const reflectedParameters = [...headerReflections, ...bodyReflections];
@@ -95,7 +95,7 @@ export async function run(
                 stableProbe: false
             });
 
-            reflectedParameters.push({ name, matches: new Array(m.count).fill([0, 0]) as any, context: ctx, aggressive: undefined, source: m.source as any, certainty: total, confidence, severity, score: total });
+            reflectedParameters.push({ name, matches: new Array(m.count).fill([0, 0]) as any, context: ctx, aggressive: undefined, source: m.source as any, confirmed: false, certainty: total, confidence, severity, score: total });
         }
     }
 

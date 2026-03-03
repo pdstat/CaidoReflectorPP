@@ -8,6 +8,7 @@ import { prettyPrintContext } from "./contextMap.js";
  * added at runtime during analysis.
  */
 export interface ReportReflectedParameter extends BaseReflectedParameter {
+  confirmed?: boolean;
   confidence?: number;
   severity?: number;
   score?: number;          // alias for certainty/total scoring percentage
@@ -47,7 +48,8 @@ export function generateReport(param: ReportReflectedParameter): string {
   const categories = param.categories;
   // Compact main line per requirement E
   // token: 2 reflections | Context: Tag Attribute (encoded) | Score: 71% (strong) [Conf 55% (high), Sev 100% (critical)]
-  let line = `${name}: ${count} reflection${count === 1 ? '' : 's'}`;
+  const unconfirmedTag = param.confirmed === false ? '[UNCONFIRMED] ' : '';
+  let line = `${unconfirmedTag}${name}: ${count} reflection${count === 1 ? '' : 's'}`;
   if (prettyContext) line += ` | Context: ${prettyContext}`;
   if (alsoIn) line += ` ${alsoIn}`; // retains "; also in ..." text
   if (headers && headers.length) line += ` | Headers: ${headers.join(', ')}`;

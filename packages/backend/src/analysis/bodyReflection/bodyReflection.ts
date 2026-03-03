@@ -18,7 +18,7 @@ import { detectEncodedOnly } from "./encodedSignalDetection.js";
 interface ReflectedParameter extends BaseReflectedParameter { confidence?: number; severity?: number; score?: number; }
 
 
-export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<ReflectedParameter[]> {
+export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconfirmed = false): Promise<ReflectedParameter[]> {
   const { request, response } = input;
   if (!request || !response) {
     sdk.console.log("[Reflector++] Skipping scan - request or response is missing");
@@ -67,11 +67,15 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK): Promise<
     const contextInfo = payloadGenerator.generate(sdk as any, param.value);
     let bestContext = resolveBestContext(baselineMatches, bodyText, tags, contextInfo);
 
-    const { confirmed, successfulChars: probeChars, bestContext: resolvedCtx, probeWasStable } = await runProbes(sdk, request, param, contextInfo, baselineMatches, baselineCode, baselineSig, bodyText, KEY_WORDS, bestContext);
+    const { confirmed, reflected, successfulChars: probeChars, bestContext: resolvedCtx, probeWasStable } = await runProbes(sdk, request, param, contextInfo, baselineMatches, baselineCode, baselineSig, bodyText, KEY_WORDS, bestContext);
     if (confirmed) {
       const allowedChars = Array.from(probeChars);
       const { confidence, severity, total } = scoreFinding({ confirmed, allowedChars, context: resolvedCtx, header: false, matchCount: baselineMatches.length, bodyLength: bodyText.length, stableProbe: probeWasStable });
-      reflectedParameters.push({ name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, certainty: total, confidence, severity, score: total });
+      reflectedParameters.push({ name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, confirmed: true, certainty: total, confidence, severity, score: total });
+    } else if (logUnconfirmed && reflected) {
+      sdk.console.log(`[Reflector++] Logging unconfirmed reflection for "${param.key}" (probe markers reflected, no dangerous chars confirmed)`);
+      const { confidence, severity, total } = scoreFinding({ confirmed: false, allowedChars: [], context: resolvedCtx, header: false, matchCount: baselineMatches.length, bodyLength: bodyText.length, stableProbe: probeWasStable });
+      reflectedParameters.push({ name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: undefined, source: param.source, confirmed: false, certainty: total, confidence, severity, score: total });
     }
   }
   return reflectedParameters;

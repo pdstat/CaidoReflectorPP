@@ -109,7 +109,7 @@ describe("runProbes()", () => {
       KEY_WORDS_LOCAL,
       "html"
     );
-    expect(result).toEqual({ confirmed: false, successfulChars: new Set(), bestContext: "html", probeWasStable: false });
+    expect(result).toEqual({ confirmed: false, reflected: false, successfulChars: new Set(), bestContext: "html", probeWasStable: false });
     expect(sdk.requests.send).not.toHaveBeenCalled();
   });
 
@@ -138,6 +138,7 @@ describe("runProbes()", () => {
       "html"
     );
     expect(result.confirmed).toBe(true);
+    expect(result.reflected).toBe(true);
     expect(result.probeWasStable).toBe(true);
     expect(Array.from(result.successfulChars)).toEqual(["<"]);
     expect(result.bestContext).toBe("html");
