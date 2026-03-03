@@ -65,3 +65,7 @@ http_dumps/
 
 # ---- Local scratch / experiments ----
 playground/
+
+# ---- Claude Code ----
+.claude/
+.claudeignore
