@@ -6,6 +6,7 @@ describe("isLiteralContext", () => {
     "attributeInQuote",
     "attribute",
     "html",
+    "htmlComment",
     "eventHandler",
     "cssInQuote",
     "css",
@@ -17,7 +18,6 @@ describe("isLiteralContext", () => {
   const falseCases = [
     "attributeEscaped",
     "eventHandlerEscaped",
-    "htmlComment",
     "jsonScript",
     "", // empty
   ];
@@ -42,7 +42,7 @@ describe("allowedDetectionContextsFor", () => {
   });
 
   test("event handler", () => {
-    expect(Array.from(allowedDetectionContextsFor("Event Handler Attribute").values())).toEqual(["eventHandler"]);
+    expect(Array.from(allowedDetectionContextsFor("Event Handler Attribute").values()).sort()).toEqual(["eventHandler", "eventHandlerAttr", "eventHandlerAttrInQuote"].sort());
   });
 
   test("attribute variants", () => {
@@ -53,6 +53,44 @@ describe("allowedDetectionContextsFor", () => {
   test("html / body", () => {
     expect(Array.from(allowedDetectionContextsFor("HTML").values())).toEqual(["html"]);
     expect(Array.from(allowedDetectionContextsFor("body snippet").values())).toEqual(["html"]);
+  });
+
+  test("url attribute variants", () => {
+    expect(Array.from(allowedDetectionContextsFor("URL Attribute (quoted)").values()).sort()).toEqual(["urlAttr", "urlAttrInQuote"].sort());
+    expect(Array.from(allowedDetectionContextsFor("URL Attribute (unquoted)").values()).sort()).toEqual(["urlAttr", "urlAttrInQuote"].sort());
+  });
+
+  test("style attribute variants", () => {
+    expect(Array.from(allowedDetectionContextsFor("Style Attribute (quoted)").values()).sort()).toEqual(["styleAttr", "styleAttrInQuote"].sort());
+    expect(Array.from(allowedDetectionContextsFor("Style Attribute (unquoted)").values()).sort()).toEqual(["styleAttr", "styleAttrInQuote"].sort());
+  });
+
+  test("css url", () => {
+    expect(Array.from(allowedDetectionContextsFor("CSS url()").values())).toEqual(["cssUrl"]);
+  });
+
+  test("srcset", () => {
+    expect(Array.from(allowedDetectionContextsFor("Srcset Attribute (quoted)").values()).sort()).toEqual(["srcsetUrl", "srcsetUrlInQuote"].sort());
+  });
+
+  test("meta refresh", () => {
+    expect(Array.from(allowedDetectionContextsFor("Meta Refresh URL").values())).toEqual(["metaRefresh"]);
+  });
+
+  test("iframe srcdoc", () => {
+    expect(Array.from(allowedDetectionContextsFor("Iframe Srcdoc (quoted)").values()).sort()).toEqual(["srcdocHtml", "srcdocHtmlInQuote"].sort());
+  });
+
+  test("template html", () => {
+    expect(Array.from(allowedDetectionContextsFor("Template HTML").values())).toEqual(["templateHtml"]);
+  });
+
+  test("html comment", () => {
+    expect(Array.from(allowedDetectionContextsFor("HTML Comment").values())).toEqual(["htmlComment"]);
+  });
+
+  test("json script block", () => {
+    expect(Array.from(allowedDetectionContextsFor("JSON Script Block (string)").values()).sort()).toEqual(["json", "jsonInQuote"].sort());
   });
 
   test("unknown context => empty", () => {

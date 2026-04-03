@@ -258,6 +258,15 @@ const ResponseBodyPayloadGenerator = class {
 		this._detectSlashSpaceGt(sdk, context, prefix, payload, suffix, res);
 		this._detectLessThanPayload(context, prefix, payload, suffix, res);
 		this._detectBackslashOrEmpty(context, prefix, payload, suffix, res);
+		this._detectSpecializedPayload(context, prefix, payload, suffix, res);
+		if (res.length === 0 && context.context.length > 0) {
+			const marker = prefix + payload + suffix;
+			if (this.body.includes(marker)) {
+				for (const ctx of context.context) {
+					res.push({ char: payload, context: ctx });
+				}
+			}
+		}
 		return res;
 	}
 
@@ -475,6 +484,24 @@ const ResponseBodyPayloadGenerator = class {
 			out.push({ char: payload, context: "css" });
 			pushed = true;
 		}
+		if (ctx.context.includes("srcdocHtmlInQuote")) {
+			if (markers.some((m) => this._markerInSrcdoc(m, true))) {
+				out.push({ char: payload, context: "srcdocHtmlInQuote" });
+				pushed = true;
+			}
+		}
+		if (ctx.context.includes("srcdocHtml")) {
+			if (markers.some((m) => this._markerInSrcdoc(m, false))) {
+				out.push({ char: payload, context: "srcdocHtml" });
+				pushed = true;
+			}
+		}
+		if (ctx.context.includes("templateHtml")) {
+			if (markers.some((m) => this._isPayloadInSpecifiedContext("template", m, false))) {
+				out.push({ char: payload, context: "templateHtml" });
+				pushed = true;
+			}
+		}
 		if (markers.some((m) => this._containsTextOutsideTags(m))) {
 			if (!pushed) out.push({ char: payload, context: "html" });
 		}
@@ -488,35 +515,403 @@ const ResponseBodyPayloadGenerator = class {
 		out: Array<{ char: string; context: string }>
 	) {
 		if (!(payload === "\\" || payload === "")) return;
+		const marker = prefix + payload + suffix;
 		let matched = false;
 		if (!matched && ctx.context.includes("jsInQuote")) {
-			const marker = prefix + payload + suffix;
 			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
 				out.push({ char: payload, context: "jsInQuote" });
 				matched = true;
 			}
 		}
 		if (!matched && ctx.context.includes("js")) {
-			const marker = prefix + payload + suffix;
 			if (this._isPayloadInSpecifiedContext("script", marker, false)) {
 				out.push({ char: payload, context: "js" });
 				matched = true;
 			}
 		}
 		if (!matched && ctx.context.includes("cssInQuote")) {
-			const marker = prefix + payload + suffix;
 			if (this._isPayloadInSpecifiedContext("style", marker, true)) {
 				out.push({ char: payload, context: "cssInQuote" });
 				matched = true;
 			}
 		}
 		if (!matched && ctx.context.includes("css")) {
-			const marker = prefix + payload + suffix;
 			if (this._isPayloadInSpecifiedContext("style", marker, false)) {
 				out.push({ char: payload, context: "css" });
 				matched = true;
 			}
 		}
+		if (!matched && ctx.context.includes("eventHandlerAttrInQuote")) {
+			if (this._markerInEventHandler(marker, true)) {
+				out.push({ char: payload, context: "eventHandlerAttrInQuote" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("eventHandlerAttr")) {
+			if (this._markerInEventHandler(marker, false)) {
+				out.push({ char: payload, context: "eventHandlerAttr" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("urlAttrInQuote")) {
+			if (this._markerInUrlAttr(marker)) {
+				out.push({ char: payload, context: "urlAttrInQuote" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("urlAttr")) {
+			if (this._markerInUrlAttr(marker)) {
+				out.push({ char: payload, context: "urlAttr" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("cssUrl")) {
+			if (this._markerInCssUrl(marker)) {
+				out.push({ char: payload, context: "cssUrl" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("styleAttrInQuote")) {
+			if (this._markerInStyleAttr(marker)) {
+				out.push({ char: payload, context: "styleAttrInQuote" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("styleAttr")) {
+			if (this._markerInStyleAttr(marker)) {
+				out.push({ char: payload, context: "styleAttr" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("srcsetUrlInQuote")) {
+			if (this._markerInSrcsetAttr(marker)) {
+				out.push({ char: payload, context: "srcsetUrlInQuote" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("srcsetUrl")) {
+			if (this._markerInSrcsetAttr(marker)) {
+				out.push({ char: payload, context: "srcsetUrl" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("metaRefresh")) {
+			if (this._markerInMetaRefresh(marker)) {
+				out.push({ char: payload, context: "metaRefresh" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("srcdocHtmlInQuote")) {
+			if (this._markerInSrcdoc(marker, true)) {
+				out.push({ char: payload, context: "srcdocHtmlInQuote" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("srcdocHtml")) {
+			if (this._markerInSrcdoc(marker, false)) {
+				out.push({ char: payload, context: "srcdocHtml" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("jsonInQuote")) {
+			if (this._markerInJsonScriptBlock(marker, true)) {
+				out.push({ char: payload, context: "jsonInQuote" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("json")) {
+			if (this._markerInJsonScriptBlock(marker, false)) {
+				out.push({ char: payload, context: "json" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("attributeInQuote")) {
+			if (this._markerInAnyAttr(marker)) {
+				out.push({ char: payload, context: "attributeInQuote" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("attribute")) {
+			if (this._markerInAnyAttr(marker)) {
+				out.push({ char: payload, context: "attribute" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("html")) {
+			if (this._containsTextOutsideTags(marker)) {
+				out.push({ char: payload, context: "html" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("htmlComment")) {
+			if (this.body.includes(marker)) {
+				out.push({ char: payload, context: "htmlComment" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("templateHtml")) {
+			if (this._isPayloadInSpecifiedContext("template", marker, false)) {
+				out.push({ char: payload, context: "templateHtml" });
+				matched = true;
+			}
+		}
+	}
+
+	private _detectSpecializedPayload(
+		ctx: { context: string[] },
+		prefix: string,
+		payload: string,
+		suffix: string,
+		out: Array<{ char: string; context: string }>
+	): void {
+		if (payload === "\\" || payload === "") return;
+		const marker = prefix + payload + suffix;
+		const _cssUrlChars = new Set([")", "(", "//", "http:", ";", "/", ":", " "]);
+		if (ctx.context.includes("cssUrl") && _cssUrlChars.has(payload)) {
+			if (this._markerInCssUrl(marker)) {
+				out.push({ char: payload, context: "cssUrl" });
+			}
+		}
+		const _styleChars = new Set(["(", ")", ";", ":", "'", '"', " "]);
+		if (ctx.context.includes("styleAttrInQuote") && _styleChars.has(payload)) {
+			if (this._markerInStyleAttr(marker)) {
+				out.push({ char: payload, context: "styleAttrInQuote" });
+			}
+		}
+		if (ctx.context.includes("styleAttr") && _styleChars.has(payload)) {
+			if (this._markerInStyleAttr(marker)) {
+				out.push({ char: payload, context: "styleAttr" });
+			}
+		}
+		const _srcsetChars = new Set(['"', "'", "/", ",", " "]);
+		if ((ctx.context.includes("srcsetUrlInQuote") || ctx.context.includes("srcsetUrl"))
+			&& _srcsetChars.has(payload)) {
+			if (this._markerInSrcsetAttr(marker)) {
+				const c = ctx.context.includes("srcsetUrlInQuote")
+					? "srcsetUrlInQuote" : "srcsetUrl";
+				out.push({ char: payload, context: c });
+			}
+		}
+		const _metaChars = new Set(["/", "//", "http:", ";", ":", "?", "#"]);
+		if (ctx.context.includes("metaRefresh") && _metaChars.has(payload)) {
+			if (this._markerInMetaRefresh(marker)) {
+				out.push({ char: payload, context: "metaRefresh" });
+			}
+		}
+		const _srcdocChars = new Set(["<", ">", '"', "'", "&", " "]);
+		if (ctx.context.includes("srcdocHtmlInQuote") && _srcdocChars.has(payload)) {
+			if (this._markerInSrcdoc(marker, true)) {
+				out.push({ char: payload, context: "srcdocHtmlInQuote" });
+			}
+		}
+		if (ctx.context.includes("srcdocHtml") && _srcdocChars.has(payload)) {
+			if (this._markerInSrcdoc(marker, false)) {
+				out.push({ char: payload, context: "srcdocHtml" });
+			}
+		}
+		const _jsonChars = new Set(['"', "'", ",", "}", "]", ":"]);
+		if (ctx.context.includes("jsonInQuote") && _jsonChars.has(payload)) {
+			if (this._markerInJsonScriptBlock(marker, true)) {
+				out.push({ char: payload, context: "jsonInQuote" });
+			}
+		}
+		if (ctx.context.includes("json") && _jsonChars.has(payload)) {
+			if (this._markerInJsonScriptBlock(marker, false)) {
+				out.push({ char: payload, context: "json" });
+			}
+		}
+		const _handlerChars = new Set([";", '"', "'", "(", ")", "&", " "]);
+		if (ctx.context.includes("eventHandlerAttrInQuote")
+			&& _handlerChars.has(payload)) {
+			if (this._markerInEventHandler(marker, true)) {
+				out.push({ char: payload, context: "eventHandlerAttrInQuote" });
+			}
+		}
+		if (ctx.context.includes("eventHandlerAttr")
+			&& _handlerChars.has(payload)) {
+			if (this._markerInEventHandler(marker, false)) {
+				out.push({ char: payload, context: "eventHandlerAttr" });
+			}
+		}
+		const _urlChars = new Set([":", "//", "?", "#", "&", "=", "'", '"', " "]);
+		if ((ctx.context.includes("urlAttrInQuote") || ctx.context.includes("urlAttr"))
+			&& _urlChars.has(payload)) {
+			if (this._markerInUrlAttr(marker)) {
+				const c = ctx.context.includes("urlAttrInQuote")
+					? "urlAttrInQuote" : "urlAttr";
+				out.push({ char: payload, context: c });
+			}
+		}
+		const _htmlChars = new Set([">", '"', "'", "/", ";", "&"]);
+		if (ctx.context.includes("html") && _htmlChars.has(payload)) {
+			if (this._containsTextOutsideTags(marker)) {
+				out.push({ char: payload, context: "html" });
+			}
+		}
+		if (ctx.context.includes("htmlComment") && _htmlChars.has(payload)
+			|| (ctx.context.includes("htmlComment") && payload === "-")) {
+			if (this.body.includes(marker)) {
+				out.push({ char: payload, context: "htmlComment" });
+			}
+		}
+		if (ctx.context.includes("templateHtml") && _htmlChars.has(payload)) {
+			if (this._isPayloadInSpecifiedContext("template", marker, false)) {
+				out.push({ char: payload, context: "templateHtml" });
+			}
+		}
+		const _attrQuotedChars = new Set(["<", ">", "'", '"', "&"]);
+		if (ctx.context.includes("attributeInQuote")
+			&& _attrQuotedChars.has(payload)) {
+			if (this._markerInAnyAttr(marker)) {
+				out.push({ char: payload, context: "attributeInQuote" });
+			}
+		}
+		const _attrUnquotedChars = new Set([" ", '"', "'", ">", "<", ";", "="]);
+		if (ctx.context.includes("attribute")
+			&& _attrUnquotedChars.has(payload)) {
+			if (this._markerInAnyAttr(marker)) {
+				out.push({ char: payload, context: "attribute" });
+			}
+		}
+		const _jsChars = new Set(["<", ">", "/", ";", "'", '"', "`"]);
+		if (ctx.context.includes("jsInQuote") && _jsChars.has(payload)) {
+			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
+				out.push({ char: payload, context: "jsInQuote" });
+			}
+		}
+		if (ctx.context.includes("js") && _jsChars.has(payload)) {
+			if (this._isPayloadInSpecifiedContext("script", marker, false)) {
+				out.push({ char: payload, context: "js" });
+			}
+		}
+		const _cssChars = new Set(["<", ">", "/", ";", "(", ")", ":"]);
+		if (ctx.context.includes("cssInQuote") && _cssChars.has(payload)) {
+			if (this._isPayloadInSpecifiedContext("style", marker, true)) {
+				out.push({ char: payload, context: "cssInQuote" });
+			}
+		}
+		if (ctx.context.includes("css") && _cssChars.has(payload)) {
+			if (this._isPayloadInSpecifiedContext("style", marker, false)) {
+				out.push({ char: payload, context: "css" });
+			}
+		}
+	}
+
+	private _markerInEventHandler(marker: string, quoted: boolean): boolean {
+		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
+		for (const el of allEls) {
+			const attrs: Record<string, string> = (el as any).attributes || {};
+			for (const name in attrs) {
+				if (!/^on/i.test(name)) continue;
+				const raw = this._getRawAttrDetail(el, name);
+				if (!raw) continue;
+				if (quoted && (raw.quote === '"' || raw.quote === "'") && raw.value.includes(marker)) return true;
+				if (!quoted && raw.quote === "" && raw.value.includes(marker)) return true;
+			}
+		}
+		return false;
+	}
+
+	private _markerInUrlAttr(marker: string): boolean {
+		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
+		for (const el of allEls) {
+			const attrs: Record<string, string> = (el as any).attributes || {};
+			for (const name in attrs) {
+				if (!this._urlAttrs.has(name.toLowerCase())) continue;
+				const raw = this._getRawAttrDetail(el, name);
+				if (raw && raw.value.includes(marker)) return true;
+			}
+		}
+		return false;
+	}
+
+	private _markerInStyleAttr(marker: string): boolean {
+		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
+		for (const el of allEls) {
+			const attrs: Record<string, string> = (el as any).attributes || {};
+			if (!("style" in attrs)) continue;
+			const raw = this._getRawAttrDetail(el, "style");
+			if (raw && raw.value.includes(marker)) return true;
+		}
+		return false;
+	}
+
+	private _markerInAnyAttr(marker: string): boolean {
+		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
+		for (const el of allEls) {
+			const attrs: Record<string, string> = (el as any).attributes || {};
+			for (const name in attrs) {
+				const raw = this._getRawAttrDetail(el, name);
+				if (raw && raw.value.includes(marker)) return true;
+			}
+		}
+		return false;
+	}
+
+	private _markerInCssUrl(marker: string): boolean {
+		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
+		for (const el of allEls) {
+			const attrs: Record<string, string> = (el as any).attributes || {};
+			if (!("style" in attrs)) continue;
+			const raw = this._getRawAttrDetail(el, "style");
+			if (!raw) continue;
+			if (/\burl\s*\(/i.test(raw.value) && raw.value.includes(marker)) return true;
+		}
+		return false;
+	}
+
+	private _markerInSrcsetAttr(marker: string): boolean {
+		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
+		for (const el of allEls) {
+			const attrs: Record<string, string> = (el as any).attributes || {};
+			if (!("srcset" in attrs)) continue;
+			const raw = this._getRawAttrDetail(el, "srcset");
+			if (raw && raw.value.includes(marker)) return true;
+		}
+		return false;
+	}
+
+	private _markerInMetaRefresh(marker: string): boolean {
+		const metas = ((this.root as any).querySelectorAll?.("meta") ?? []) as any[];
+		for (const el of metas) {
+			const httpEquiv = (el.getAttribute?.("http-equiv") || "").toLowerCase();
+			if (httpEquiv !== "refresh") continue;
+			const raw = this._getRawAttrDetail(el as any, "content");
+			if (raw && raw.value.includes(marker)) return true;
+		}
+		return false;
+	}
+
+	private _markerInSrcdoc(marker: string, quoted: boolean): boolean {
+		const iframes = ((this.root as any).querySelectorAll?.("iframe") ?? []) as any[];
+		for (const el of iframes) {
+			const raw = this._getRawAttrDetail(el as any, "srcdoc");
+			if (!raw) continue;
+			const isQuoted = raw.quote === '"' || raw.quote === "'";
+			if (quoted === isQuoted && raw.value.includes(marker)) return true;
+		}
+		return false;
+	}
+
+	private _markerInJsonScriptBlock(marker: string, inquote: boolean): boolean {
+		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
+		for (const el of scripts) {
+			const type = (el.getAttribute?.("type") || "").toLowerCase();
+			if (!/(?:application|text)\/(?:json|ld\+json)/.test(type)) continue;
+			const src: string = typeof el.rawText === "string"
+				? el.rawText
+				: (typeof el.text === "string" ? el.text : "");
+			if (!src) continue;
+			if (inquote) {
+				let pos = -1;
+				while ((pos = src.indexOf(marker, pos + 1)) !== -1) {
+					if (this._isInsideJsQuotedStringAt(src, pos)) return true;
+				}
+			} else {
+				if (src.includes(marker)) return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -621,6 +1016,7 @@ const ResponseBodyPayloadGenerator = class {
 			this._handleAttributes(node, reflectedValue, payloadSet, contextSet);
 		});
 		this._applyHtmlFallbackIfNeeded(reflectedValue, payloadSet, contextSet);
+		payloadSet.add("");
 		sdk.console.log(`[Reflector++] Generated payloads: ${Array.from(payloadSet).join(", ")}`);
 		sdk.console.log(`[Reflector++] Detected contexts: ${Array.from(contextSet).join(", ")}`);
 		return { payload: Array.from(payloadSet), context: Array.from(contextSet) };
@@ -640,26 +1036,58 @@ const ResponseBodyPayloadGenerator = class {
 		"xlink:href",
 	]);
 
+	private _addHtmlProbes(set: Set<string>) {
+		set.add("<");
+		set.add(">");
+		set.add('"');
+		set.add("'");
+		set.add("/");
+		set.add(";");
+	}
 	private _addUrlProbes(set: Set<string>, quoted: boolean, quoteChar?: string) {
+		if (quoted && quoteChar) set.add(quoteChar);
+		for (const q of ["'", '"']) {
+			if (q !== quoteChar) set.add(q);
+		}
 		set.add(":");
 		set.add("//");
-		if (quoted && quoteChar) set.add(quoteChar);
+		set.add("?");
+		set.add("#");
+		set.add("&");
+		set.add("=");
+		if (!quoted) set.add(" ");
 	}
 	private _addCssUrlProbes(set: Set<string>) {
 		set.add(")");
+		set.add("(");
 		set.add("//");
 		set.add("http:");
+		set.add(";");
+		set.add("\\");
 	}
 	private _addStyleAttrProbes(set: Set<string>, quote?: string) {
 		if (quote) set.add(quote);
+		for (const q of ["'", '"']) {
+			if (q !== quote) set.add(q);
+		}
 		set.add("\\");
 		set.add("(");
 		set.add(")");
+		set.add(";");
+		set.add(":");
+		if (!quote) set.add(" ");
 	}
 	private _addJsHandlerProbes(set: Set<string>, quote?: string) {
 		if (quote) set.add(quote);
+		for (const q of ["'", '"']) {
+			if (q !== quote) set.add(q);
+		}
 		set.add("\\");
 		set.add(";");
+		set.add("(");
+		set.add(")");
+		set.add("&");
+		if (!quote) set.add(" ");
 	}
 	private _hasAncestorTag(node: any, tagUpper: string): boolean {
 		let p: any = node;
@@ -687,7 +1115,7 @@ const ResponseBodyPayloadGenerator = class {
 		if (tag === "STYLE") return this._handleStyleText(text, reflectedValue, payloadSet, contextSet);
 		if (tag === "TEMPLATE") {
 			contextSet.add("templateHtml");
-			payloadSet.add("<");
+			this._addHtmlProbes(payloadSet);
 			return true;
 		}
 		return false;
@@ -705,11 +1133,27 @@ const ResponseBodyPayloadGenerator = class {
 		if (this._isJsExecutableScriptType(typeAttr)) {
 			const quotes = this._getQuoteInfo(text, reflectedValue);
 			const quote = quotes[0] || "";
-			payloadSet.add(quote);
 			let ctx = "js";
 			if (quote) {
+				payloadSet.add(quote);
 				payloadSet.add("\\");
 				ctx = "jsInQuote";
+				for (const q of ["'", '"', "`"]) {
+					if (q !== quote) payloadSet.add(q);
+				}
+				payloadSet.add("<");
+				payloadSet.add(">");
+				payloadSet.add("/");
+				payloadSet.add(";");
+			} else {
+				payloadSet.add("<");
+				payloadSet.add(">");
+				payloadSet.add("/");
+				payloadSet.add(";");
+				payloadSet.add("'");
+				payloadSet.add('"');
+				payloadSet.add("`");
+				payloadSet.add("\\");
 			}
 			contextSet.add(ctx);
 			try {
@@ -728,6 +1172,10 @@ const ResponseBodyPayloadGenerator = class {
 			contextSet.add(quotes.length ? "jsonInQuote" : "json");
 			payloadSet.add(quote);
 			payloadSet.add("\\");
+			payloadSet.add(",");
+			payloadSet.add("}");
+			payloadSet.add("]");
+			payloadSet.add(":");
 			try {
 				sdk?.console?.log?.(
 					`[Reflector++][gen] SCRIPT hit: type="${typeAttr}" exec=false ctx=${quotes.length ? "jsonInQuote" : "json"} quote=${JSON.stringify(
@@ -748,11 +1196,28 @@ const ResponseBodyPayloadGenerator = class {
 	): boolean {
 		const quotes = this._getQuoteInfo(text, reflectedValue);
 		const quote = quotes[0] || "";
-		payloadSet.add(quote);
 		let ctx = "css";
 		if (quote) {
+			payloadSet.add(quote);
 			payloadSet.add("\\");
 			ctx = "cssInQuote";
+			for (const q of ["'", '"']) {
+				if (q !== quote) payloadSet.add(q);
+			}
+			payloadSet.add("<");
+			payloadSet.add(">");
+			payloadSet.add(";");
+			payloadSet.add("(");
+			payloadSet.add(")");
+		} else {
+			payloadSet.add("<");
+			payloadSet.add(">");
+			payloadSet.add("/");
+			payloadSet.add(";");
+			payloadSet.add("(");
+			payloadSet.add(")");
+			payloadSet.add("\\");
+			payloadSet.add(":");
 		}
 		contextSet.add(ctx);
 		return true;
@@ -780,15 +1245,15 @@ const ResponseBodyPayloadGenerator = class {
 			} else {
 				if (this._hasAncestorTag(parent, "TEMPLATE")) {
 					contextSet.add("templateHtml");
-					payloadSet.add("<");
+					this._addHtmlProbes(payloadSet);
 					return true;
 				}
-				payloadSet.add("<");
+				this._addHtmlProbes(payloadSet);
 				contextSet.add("html");
 				return true;
 			}
 		} else {
-			payloadSet.add("<");
+			this._addHtmlProbes(payloadSet);
 			contextSet.add("html");
 			return true;
 		}
@@ -806,6 +1271,10 @@ const ResponseBodyPayloadGenerator = class {
 			node.text.includes(reflectedValue);
 		if (!isComment) return false;
 		payloadSet.add("<");
+		payloadSet.add(">");
+		payloadSet.add("-");
+		payloadSet.add('"');
+		payloadSet.add("'");
 		contextSet.add("htmlComment");
 		return true;
 	}
@@ -874,16 +1343,23 @@ const ResponseBodyPayloadGenerator = class {
 				} else {
 					contextSet.add("srcsetUrl");
 					payloadSet.add("");
+					payloadSet.add(" ");
 				}
-				payloadSet.add("//example 1x");
+				payloadSet.add("/");
+				payloadSet.add(",");
 				return;
 			}
 			if (tagName === "META" && lower === "content") {
 				const httpEquiv = (el.getAttribute?.("http-equiv") || "").toLowerCase();
 				if (httpEquiv === "refresh" && /url\s*=/.test(decoded)) {
 					contextSet.add("metaRefresh");
+					payloadSet.add("/");
 					payloadSet.add("//");
 					payloadSet.add("http:");
+					payloadSet.add(";");
+					payloadSet.add(":");
+					payloadSet.add("?");
+					payloadSet.add("#");
 					return;
 				}
 			}
@@ -892,11 +1368,17 @@ const ResponseBodyPayloadGenerator = class {
 				if (quoted) {
 					contextSet.add("srcdocHtmlInQuote");
 					payloadSet.add(raw!.quote);
+					for (const q of ["'", '"']) {
+						if (q !== raw!.quote) payloadSet.add(q);
+					}
 				} else {
 					contextSet.add("srcdocHtml");
 					payloadSet.add("");
+					payloadSet.add(" ");
 				}
 				payloadSet.add("<");
+				payloadSet.add(">");
+				payloadSet.add("&");
 				return;
 			}
 			if (!raw) {
@@ -906,9 +1388,22 @@ const ResponseBodyPayloadGenerator = class {
 			if (raw.value.includes(reflectedValue)) {
 				if (raw.quote === '"' || raw.quote === "'") {
 					payloadSet.add(raw.quote);
+					for (const q of ["'", '"']) {
+						if (q !== raw.quote) payloadSet.add(q);
+					}
+					payloadSet.add("<");
+					payloadSet.add(">");
+					payloadSet.add("&");
 					contextSet.add("attributeInQuote");
 				} else {
 					payloadSet.add("");
+					payloadSet.add(" ");
+					payloadSet.add('"');
+					payloadSet.add("'");
+					payloadSet.add(">");
+					payloadSet.add("<");
+					payloadSet.add(";");
+					payloadSet.add("=");
 					contextSet.add("attribute");
 				}
 			} else {

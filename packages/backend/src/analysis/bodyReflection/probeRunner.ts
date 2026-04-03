@@ -70,7 +70,7 @@ export async function runProbes(
                 const decodedNeedle = m.pre + m.ch + m.suf;
                 sdk.console.log(`[Reflector++] Looking for needle: ${encodedNeedle} in probe body ${probeBody.substring(0, 100)}...`);
                 const foundEncoded = findMatches(probeBody, encodedNeedle, true, sdk).length > 0;
-                const foundDecoded = isJsonResponse && findMatches(probeBody, decodedNeedle, true, sdk).length > 0;
+                const foundDecoded = findMatches(probeBody, decodedNeedle, true, sdk).length > 0;
                 if (!foundEncoded && !foundDecoded) continue;
                 reflected = true;
                 const detections = detectPg.detect({ console: (sdk as any).console }, { context: contextInfo.context }, m.pre, m.ch, m.suf);
@@ -86,6 +86,23 @@ export async function runProbes(
                 }
             }
         } catch (e) { (sdk as any).console.log(`[Reflector++] Probe error for ${param.key}: ${e}`); }
+    }
+    // Post-processing: In JSON string contexts where quote breakout
+    // is impossible (" and \ both escaped), structural chars (, } ] :)
+    // are trapped and not exploitable. Remove them.
+    const ctxArr: string[] = contextInfo?.context ?? [];
+    const jsonStrCtxs = new Set(["jsonString", "jsonInQuote"]);
+    const jsonStructCtxs = new Set(["jsonStructure", "json"]);
+    const hasJsonStr = ctxArr.some((c: string) => jsonStrCtxs.has(c));
+    const hasJsonStruct = ctxArr.some((c: string) => jsonStructCtxs.has(c));
+    if (hasJsonStr && !hasJsonStruct) {
+        const quoteBreakable = successfulChars.has('"') || successfulChars.has("\\");
+        const scriptBreakable = ctxArr.includes("jsonInQuote") && successfulChars.has("<");
+        if (!quoteBreakable && !scriptBreakable) {
+            for (const sc of [",", "}", "]", ":"]) successfulChars.delete(sc);
+            const hasExploitable = [...successfulChars].some(c => c !== "");
+            if (!hasExploitable) confirmed = false;
+        }
     }
     return { confirmed, reflected, successfulChars, bestContext, probeWasStable };
 }

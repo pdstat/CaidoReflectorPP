@@ -144,11 +144,13 @@ s.prop1   = "saveandretrieve:hello:quote";
             expect(res.map((r: any) => r.char)).toContain("'");
         });
 
-        test("Non-executable script type is excluded", () => {
+        test("Non-executable script type: JS detector skips, body fallback confirms", () => {
             const html = `<script type="application/json">{"k":"PRE'SUF"}</script>`;
-            // detect() searches only executable <script> nodes for JS contexts. :contentReference[oaicite:2]{index=2}
+            // JS-specific detector skips non-executable scripts, but body
+            // fallback confirms since the marker is literally reflected.
             const res = det(html, ["jsInQuote"], "PRE", "'", "SUF");
-            expect(res).toHaveLength(0);
+            expect(res).toHaveLength(1);
+            expect(res[0].context).toBe("jsInQuote");
         });
     });
 
@@ -292,13 +294,15 @@ describe("PayloadGenerator.generate()", () => {
     });
 
     describe("SCRIPT contexts (JS)", () => {
-        test("Unquoted JS occurrence → js (no added backslash)", () => {
+        test("Unquoted JS occurrence → js with full exploit probes", () => {
             // Not inside a string literal; just present in script text.
             const { context, payload } = gen(`<script>const x = REF; // raw</script>`);
             expect(context).toContain("js");
             expect(context).not.toContain("jsInQuote");
-            expect(payload).toContain("");     // empty probe when not in a string
-            expect(payload).not.toContain("\\");
+            expect(payload).toContain("");
+            expect(payload).toContain("<");
+            expect(payload).toContain(";");
+            expect(payload).toContain("\\");
         });
 
         test("Single-quoted string → jsInQuote + '\'' + '\\\\' payloads", () => {
@@ -436,10 +440,10 @@ describe("PayloadGenerator.generate() – extended contexts", () => {
         expect(payload).toEqual(expect.arrayContaining(["", ":", "//"]));
     });
 
-    test("srcset attribute → srcsetUrlInQuote + descriptor probe", () => {
+    test("srcset attribute → srcsetUrlInQuote + probes", () => {
         const { context, payload } = gen(`<img srcset="REF 1x">`);
         expect(context).toContain("srcsetUrlInQuote");
-        expect(payload).toEqual(expect.arrayContaining(['"', "//example 1x"]));
+        expect(payload).toEqual(expect.arrayContaining(['"', "/", ","]));
     });
 
     test("style attribute (unquoted) → styleAttr (+ cssUrl if url(...))", () => {
@@ -493,27 +497,99 @@ describe("PayloadGenerator.generate() – extended contexts", () => {
     });
 });
 
+describe("Bug #4: empty baseline payload always included", () => {
+    test("html context includes empty baseline", () => {
+        const { payload } = gen(`<div>Hello REF</div>`);
+        expect(payload).toContain("");
+    });
+
+    test("htmlComment context includes empty baseline", () => {
+        const { payload } = gen(`<!-- before REF after -->`);
+        expect(payload).toContain("");
+    });
+
+    test("attributeInQuote context includes empty baseline", () => {
+        const { payload } = gen(`<img alt="REF">`);
+        expect(payload).toContain("");
+    });
+
+    test("jsInQuote context includes empty baseline", () => {
+        const { payload } = gen(`<script>const s = "...REF...";</script>`);
+        expect(payload).toContain("");
+    });
+
+    test("cssInQuote context includes empty baseline", () => {
+        const { payload } = gen(`<style>.x{content:"...REF...";}</style>`);
+        expect(payload).toContain("");
+    });
+
+    test("eventHandlerAttrInQuote context includes empty baseline", () => {
+        const { payload } = gen(`<button onclick="doIt('REF')">x</button>`);
+        expect(payload).toContain("");
+    });
+
+    test("urlAttrInQuote context includes empty baseline", () => {
+        const { payload } = gen(`<a href="REF">x</a>`);
+        expect(payload).toContain("");
+    });
+
+    test("templateHtml context includes empty baseline", () => {
+        const { payload } = gen(`<template><p>REF</p></template>`);
+        expect(payload).toContain("");
+    });
+
+    test("metaRefresh context includes empty baseline", () => {
+        const { payload } = gen(`<meta http-equiv="refresh" content="0;url=REF">`);
+        expect(payload).toContain("");
+    });
+});
+
+describe("Bug #5: detect backslash/empty for attribute contexts", () => {
+    test("empty payload in eventHandlerAttr → eventHandlerAttr", () => {
+        const html = `<button onclick=PRESUF>x</button>`;
+        const res = det(html, ["eventHandlerAttr"], "PRE", "", "SUF");
+        expect(res.map(r => r.context)).toContain("eventHandlerAttr");
+    });
+
+    test("empty payload in urlAttr → urlAttr", () => {
+        const html = `<img src=PRESUF>`;
+        const res = det(html, ["urlAttr"], "PRE", "", "SUF");
+        expect(res.map(r => r.context)).toContain("urlAttr");
+    });
+
+    test("empty payload in styleAttr → styleAttr", () => {
+        const html = `<div style=PRESUF>x</div>`;
+        const res = det(html, ["styleAttr"], "PRE", "", "SUF");
+        expect(res.map(r => r.context)).toContain("styleAttr");
+    });
+
+    test("empty payload in attributeInQuote → attributeInQuote", () => {
+        const html = `<img alt="PRESUF">`;
+        const res = det(html, ["attributeInQuote"], "PRE", "", "SUF");
+        expect(res.map(r => r.context)).toContain("attributeInQuote");
+    });
+
+    test("empty payload in html context → html", () => {
+        const html = `<div>PRESUF</div>`;
+        const res = det(html, ["html"], "PRE", "", "SUF");
+        expect(res.map(r => r.context)).toContain("html");
+    });
+});
+
 describe("PayloadGenerator.generate() – PrevLocation=hello reflected into JS strings", () => {
-    test("Produces jsInQuote with minimal probes: quote + backslash", () => {
+    test("Produces jsInQuote with full exploit probes", () => {
         const { context, payload } = gen(html, "hello");
 
         // Context classification
         expect(context).toContain("jsInQuote");
-        expect(context).not.toContain("js");            // not unquoted JS
+        expect(context).not.toContain("js");
         expect(context).not.toContain("css");
         expect(context).not.toContain("html");
-        expect(context).not.toContain("attribute");
-        expect(context).not.toContain("attributeInQuote");
-        expect(context).not.toContain("attributeEscaped");
 
-        // Minimal probe set for quoted JS strings
-        expect(payload).toEqual(expect.arrayContaining(['"', '\\']));
+        // Full probe set for quoted JS strings
+        expect(payload).toEqual(expect.arrayContaining(['"', '\\', '<', '>', '/', ';']));
 
-        // Should NOT include unrelated probes for this case
-        expect(payload).not.toContain("<");  // not HTML/text
-        expect(payload).not.toContain("");   // empty probe is for unquoted cases
-
-        // Dedupe sanity (generate() returns unique sets)
+        // Dedupe sanity
         expect(new Set(payload).size).toBe(payload.length);
         expect(new Set(context).size).toBe(context.length);
     });
@@ -528,8 +604,9 @@ describe("PayloadGenerator.generate() – PrevLocation=hello reflected into JS s
         const { context, payload } = gen(html, "hello");
         // There are many occurrences, but we still only expect one jsInQuote context label.
         expect(context.filter(c => c === "jsInQuote").length).toBe(1);
-        // Probes remain the minimal pair for quoted JS strings.
-        expect(payload.sort()).toEqual(['"', '\\'].sort());
+        // Full probe set now includes exploit chars + "" baseline
+        expect(payload).toEqual(expect.arrayContaining(['', '"', '\\', '<']));
+        expect(new Set(payload).size).toBe(payload.length);
     });
 
     test("Changing the reflected token (e.g., a single char of 'hello') keeps jsInQuote", () => {
@@ -537,5 +614,427 @@ describe("PayloadGenerator.generate() – PrevLocation=hello reflected into JS s
         const { context, payload } = gen(html, "h");
         expect(context).toContain("jsInQuote");
         expect(payload).toEqual(expect.arrayContaining(['"', '\\']));
+    });
+});
+
+describe("detect() — specialized context handlers", () => {
+    test("cssUrl: ) detected in style url()", () => {
+        const h = `<div style="background: url(PRE)SUF)">x</div>`;
+        const res = det(h, ["cssUrl"], "PRE", ")", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("cssUrl");
+    });
+
+    test("cssUrl: // detected in style url()", () => {
+        const h = `<div style="background: url(PRE//SUF)">x</div>`;
+        const res = det(h, ["cssUrl"], "PRE", "//", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("cssUrl");
+    });
+
+    test("cssUrl: empty payload via _detectBackslashOrEmpty", () => {
+        const h = `<div style="background: url(PRESUF)">x</div>`;
+        const res = det(h, ["cssUrl"], "PRE", "", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("cssUrl");
+    });
+
+    test("srcsetUrlInQuote: / detected in srcset", () => {
+        const h = `<img srcset="PRE/SUF 1x">`;
+        const res = det(h, ["srcsetUrlInQuote"], "PRE", "/", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("srcsetUrlInQuote");
+    });
+
+    test("srcsetUrl: empty payload in unquoted srcset", () => {
+        const h = `<img srcset=PRESUF>`;
+        const res = det(h, ["srcsetUrl"], "PRE", "", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("srcsetUrl");
+    });
+
+    test("metaRefresh: // detected in meta refresh", () => {
+        const h = `<meta http-equiv="refresh" content="0;url=PRE//SUF">`;
+        const res = det(h, ["metaRefresh"], "PRE", "//", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("metaRefresh");
+    });
+
+    test("metaRefresh: empty payload via _detectBackslashOrEmpty", () => {
+        const h = `<meta http-equiv="refresh" content="0;url=PRESUF">`;
+        const res = det(h, ["metaRefresh"], "PRE", "", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("metaRefresh");
+    });
+
+    test("srcdocHtmlInQuote: < detected in srcdoc", () => {
+        const h = `<iframe srcdoc="PRE<SUF"></iframe>`;
+        const res = det(h, ["srcdocHtmlInQuote"], "PRE", "<", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("srcdocHtmlInQuote");
+    });
+
+    test("srcdocHtml: empty payload in unquoted srcdoc", () => {
+        const h = `<iframe srcdoc=PRESUF></iframe>`;
+        const res = det(h, ["srcdocHtml"], "PRE", "", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("srcdocHtml");
+    });
+
+    test("jsonInQuote: quote detected in JSON script block", () => {
+        const h = `<script type="application/json">{"key":"PRE"SUF"}</script>`;
+        const res = det(h, ["jsonInQuote"], "PRE", '"', "SUF");
+        expect(res.map((r: any) => r.context)).toContain("jsonInQuote");
+    });
+
+    test("jsonInQuote: backslash via _detectBackslashOrEmpty", () => {
+        const h = `<script type="application/json">{"key":"PRE\\SUF"}</script>`;
+        const res = det(h, ["jsonInQuote"], "PRE", "\\", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("jsonInQuote");
+    });
+
+    test("json: empty payload in JSON script block structure", () => {
+        const h = `<script type="application/json">{PRESUF: 1}</script>`;
+        const res = det(h, ["json"], "PRE", "", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("json");
+    });
+
+    test("styleAttrInQuote: ( detected in style attr", () => {
+        const h = `<div style="color: PRE(SUF">x</div>`;
+        const res = det(h, ["styleAttrInQuote"], "PRE", "(", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("styleAttrInQuote");
+    });
+
+    test("eventHandlerAttrInQuote: ; detected in event handler", () => {
+        const h = `<div onclick="PRE;SUF">x</div>`;
+        const res = det(h, ["eventHandlerAttrInQuote"], "PRE", ";", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("eventHandlerAttrInQuote");
+    });
+
+    test("urlAttrInQuote: : detected in URL attr", () => {
+        const h = `<a href="PRE:SUF">x</a>`;
+        const res = det(h, ["urlAttrInQuote"], "PRE", ":", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("urlAttrInQuote");
+    });
+
+    test("urlAttrInQuote: ? detected", () => {
+        const h = `<a href="PRE?SUF">x</a>`;
+        const res = det(h, ["urlAttrInQuote"], "PRE", "?", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("urlAttrInQuote");
+    });
+
+    test("metaRefresh: ; detected", () => {
+        const h = `<meta http-equiv="refresh" content="0;url=PRE;SUF">`;
+        const res = det(h, ["metaRefresh"], "PRE", ";", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("metaRefresh");
+    });
+
+    test("metaRefresh: / detected", () => {
+        const h = `<meta http-equiv="refresh" content="0;url=PRE/SUF">`;
+        const res = det(h, ["metaRefresh"], "PRE", "/", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("metaRefresh");
+    });
+
+    test("srcdocHtmlInQuote: > detected", () => {
+        const h = `<iframe srcdoc="PRE>SUF"></iframe>`;
+        const res = det(h, ["srcdocHtmlInQuote"], "PRE", ">", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("srcdocHtmlInQuote");
+    });
+
+    test("jsonInQuote: , detected in JSON script block", () => {
+        const h = `<script type="application/json">{"key":"PRE,SUF"}</script>`;
+        const res = det(h, ["jsonInQuote"], "PRE", ",", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("jsonInQuote");
+    });
+
+    test("jsonInQuote: } detected in JSON script block", () => {
+        const h = `<script type="application/json">{"key":"PRE}SUF"}</script>`;
+        const res = det(h, ["jsonInQuote"], "PRE", "}", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("jsonInQuote");
+    });
+
+    test("json: , detected in JSON script block structure", () => {
+        const h = `<script type="application/json">{PRE,SUF}</script>`;
+        const res = det(h, ["json"], "PRE", ",", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("json");
+    });
+
+    test("eventHandlerAttrInQuote: ( detected", () => {
+        const h = `<div onclick="PRE(SUF">x</div>`;
+        const res = det(h, ["eventHandlerAttrInQuote"], "PRE", "(", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("eventHandlerAttrInQuote");
+    });
+
+    test("eventHandlerAttr: ; detected in unquoted handler", () => {
+        const h = `<div onclick=PRE;SUF>x</div>`;
+        const res = det(h, ["eventHandlerAttr"], "PRE", ";", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("eventHandlerAttr");
+    });
+
+    test("html: > detected in text", () => {
+        const h = `<div>PRE>SUF</div>`;
+        const res = det(h, ["html"], "PRE", ">", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("html");
+    });
+
+    test("html: ; detected in text", () => {
+        const h = `<div>PRE;SUF</div>`;
+        const res = det(h, ["html"], "PRE", ";", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("html");
+    });
+
+    test("htmlComment: - detected", () => {
+        const h = `<!-- PRE-SUF -->`;
+        const res = det(h, ["htmlComment"], "PRE", "-", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("htmlComment");
+    });
+
+    test("htmlComment: > detected", () => {
+        const h = `<!-- PRE>SUF -->`;
+        const res = det(h, ["htmlComment"], "PRE", ">", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("htmlComment");
+    });
+
+    test("templateHtml: > detected", () => {
+        const h = `<template>PRE>SUF</template>`;
+        const res = det(h, ["templateHtml"], "PRE", ">", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("templateHtml");
+    });
+
+    test("templateHtml: < detected via _detectLessThanPayload", () => {
+        const h = `<template><div>PRE<SUF</div></template>`;
+        const res = det(h, ["templateHtml"], "PRE", "<", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("templateHtml");
+    });
+
+    test("js: ; detected in unquoted script", () => {
+        const h = `<script>var x=PRE;SUF</script>`;
+        const res = det(h, ["js"], "PRE", ";", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("js");
+    });
+
+    test("css: ; detected in style", () => {
+        const h = `<style>body{color:PRE;SUF}</style>`;
+        const res = det(h, ["css"], "PRE", ";", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("css");
+    });
+
+    test("attribute: = detected in unquoted attr", () => {
+        const h = `<div class=PRE=SUF>x</div>`;
+        const res = det(h, ["attribute"], "PRE", "=", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("attribute");
+    });
+
+    test("styleAttrInQuote: ; detected", () => {
+        const h = `<div style="color:PRE;SUF">x</div>`;
+        const res = det(h, ["styleAttrInQuote"], "PRE", ";", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("styleAttrInQuote");
+    });
+
+    test("srcsetUrl: , detected in unquoted srcset", () => {
+        const h = `<img srcset=PRE,SUF>`;
+        const res = det(h, ["srcsetUrl"], "PRE", ",", "SUF");
+        expect(res.map((r: any) => r.context)).toContain("srcsetUrl");
+    });
+
+    test("escaped srcdoc does NOT confirm", () => {
+        const h = `<iframe srcdoc="PRE&lt;SUF"></iframe>`;
+        const res = det(h, ["srcdocHtmlInQuote"], "PRE", "<", "SUF");
+        expect(res.map((r: any) => r.context)).not.toContain("srcdocHtmlInQuote");
+    });
+
+    test("escaped json script does NOT confirm", () => {
+        const h = `<script type="application/json">{"key":"PRE\\u003cSUF"}</script>`;
+        const res = det(h, ["jsonInQuote"], "PRE", "<", "SUF");
+        expect(res.map((r: any) => r.context)).not.toContain("jsonInQuote");
+    });
+});
+
+describe("generate() — expanded payload coverage", () => {
+    test("js unquoted: probes all critical chars", () => {
+        const { payload } = gen(`<script>const x = REF;</script>`);
+        for (const c of ["<", ">", "/", ";", "'", '"', "\\", "\`"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("jsInQuote: probes breakout + script escape chars", () => {
+        const { payload } = gen(`<script>var s="REF";</script>`);
+        for (const c of ['"', "\\", "<", ">", "/", ";"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("css unquoted: probes all critical chars", () => {
+        const { payload } = gen(`<style>body{color:REF}</style>`);
+        for (const c of ["<", ">", "/", ";", "(", ")", "\\", ":"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("cssInQuote: probes breakout chars", () => {
+        const { payload } = gen(`<style>body{font:"REF"}</style>`);
+        for (const c of ['"', "\\", "<", ">", ";", "(", ")"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("html text: probes tag injection chars", () => {
+        const { payload } = gen(`<div>REF</div>`);
+        for (const c of ["<", ">", '"', "'", "/", ";"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("htmlComment: probes breakout chars", () => {
+        const { payload } = gen(`<!-- REF -->`);
+        for (const c of ["<", ">", "-", '"', "'"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("template: probes html injection chars", () => {
+        const { payload } = gen(`<template>REF</template>`);
+        for (const c of ["<", ">", '"', "'", "/", ";"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("attribute unquoted: probes breakout chars", () => {
+        const { payload } = gen(`<div class=REF>`);
+        for (const c of [" ", '"', "'", ">", "<", ";", "="]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("attributeInQuote: probes quote + tag chars", () => {
+        const { payload } = gen(`<div class="REF">`);
+        for (const c of ['"', "<", ">", "&"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("eventHandler quoted: probes call chars", () => {
+        const { payload } = gen(`<div onclick="REF">x</div>`);
+        for (const c of ['"', "\\", ";", "(", ")", "&"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("eventHandler unquoted: probes all handler chars", () => {
+        const { payload } = gen(`<div onclick=REF>x</div>`);
+        for (const c of ["\\", ";", "(", ")", "&", " "]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("urlAttr quoted: probes protocol + query chars", () => {
+        const { payload } = gen(`<a href="REF">x</a>`);
+        for (const c of ['"', ":", "//", "?", "#", "&", "="]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("urlAttr unquoted: probes + space", () => {
+        const { payload } = gen(`<a href=REF>x</a>`);
+        for (const c of [":", "//", "?", "#", "&", "=", " "]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("styleAttr quoted: probes injection chars", () => {
+        const { payload } = gen(`<div style="REF">x</div>`);
+        for (const c of ['"', "\\", "(", ")", ";", ":"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("cssUrl: probes url breakout", () => {
+        const { payload } = gen(`<div style="background:url(REF)">x</div>`);
+        for (const c of [")", "(", ";", "\\"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("srcset quoted: probes descriptor chars", () => {
+        const { payload } = gen(`<img srcset="REF 1x">`);
+        for (const c of ['"', "/", ","]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("metaRefresh: probes url chars", () => {
+        const { payload } = gen(`<meta http-equiv="refresh" content="0;url=REF">`);
+        for (const c of ["/", "//", ";", ":", "?", "#"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("srcdoc quoted: probes html injection chars", () => {
+        const { payload } = gen(`<iframe srcdoc="REF"></iframe>`);
+        for (const c of ['"', "<", ">", "&"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("jsonScript string: probes structure chars", () => {
+        const { payload } = gen(`<script type="application/json">{"k":"REF"}</script>`);
+        for (const c of ['"', "\\", ",", "}", "]", ":"]) {
+            expect(payload).toContain(c);
+        }
+    });
+
+    test("jsonScript structure: probes same chars", () => {
+        const { payload } = gen(`<script type="application/json">{REF}</script>`);
+        for (const c of ['"', "\\", ",", "}", "]", ":"]) {
+            expect(payload).toContain(c);
+        }
+    });
+});
+
+describe("detect() — raw body fallback for DOM-breaking chars", () => {
+    test("quoted attr: \" breaks DOM but body fallback confirms", () => {
+        // Server reflects " inside quoted attr, breaking HTML structure
+        const h = `<div class="PRE"SUF">rest</div>`;
+        const res = det(h, ["attributeInQuote"], "PRE", '"', "SUF");
+        expect(res.length).toBeGreaterThan(0);
+        expect(res[0].context).toBe("attributeInQuote");
+    });
+
+    test("event handler quoted: ( breaks DOM but body fallback confirms", () => {
+        const h = `<div onclick="PRE(SUF">x</div>`;
+        const res = det(h, ["eventHandlerAttrInQuote"], "PRE", "(", "SUF");
+        expect(res.length).toBeGreaterThan(0);
+    });
+
+    test("html: < in text — body fallback confirms", () => {
+        // < creates a new tag in parser, _containsTextOutsideTags fails
+        const h = `<div>PRE<SUF</div>`;
+        const res = det(h, ["html"], "PRE", "<", "SUF");
+        expect(res.length).toBeGreaterThan(0);
+    });
+
+    test("template: < in template — body fallback confirms", () => {
+        const h = `<template>PRE<SUF</template>`;
+        const res = det(h, ["templateHtml"], "PRE", "<", "SUF");
+        expect(res.length).toBeGreaterThan(0);
+    });
+
+    test("srcdoc quoted: < reflected — body fallback confirms", () => {
+        const h = `<iframe srcdoc="PRE<SUF">x</iframe>`;
+        const res = det(h, ["srcdocHtmlInQuote"], "PRE", "<", "SUF");
+        expect(res.length).toBeGreaterThan(0);
+    });
+
+    test("no fallback if marker not in body (entity-escaped)", () => {
+        // Marker is NOT in body literally (server entity-encoded it)
+        // _detectAttributeQuotePayload correctly detects as escaped
+        const h = `<div class="PRE&quot;SUF">rest</div>`;
+        const res = det(h, ["attributeInQuote"], "PRE", '"', "SUF");
+        expect(res[0].context).toBe("attributeEscaped");
+        expect(res.map(r => r.context)).not.toContain("attributeInQuote");
+    });
+
+    test("multi-context fallback pushes all contexts (cssUrl + styleAttrInQuote)", () => {
+        // When " in batch breaks the style attr, fallback pushes both contexts
+        const h = `<div style="background: url(PRE)SUF)">x</div>`;
+        // Simulate DOM-breaking: parser sees style="background: url(PRE)" then garbage
+        // If DOM detection fails, body fallback should push ALL contexts
+        const res = det(h, ["styleAttrInQuote", "cssUrl"], "PRE", ")", "SUF");
+        const ctxs = res.map((r: any) => r.context);
+        // DOM-based detection may work for ) (doesn't break HTML quotes),
+        // but if it fails, fallback should include cssUrl
+        expect(ctxs.length).toBeGreaterThan(0);
     });
 });

@@ -43,13 +43,28 @@ describe("JsonResponseBodyPayloadGenerator.detect()", () => {
         expect(res.map((r) => r.char)).toContain("REF");
     });
 
-    test("context gating filters out other contexts", () => {
+    test("reports all contexts where marker is found (no gating)", () => {
         const res = det(`{"key":"REF","other":REF}`, ["jsonString"], "", "REF", "");
-        expect(res.map((r) => r.context)).toEqual(["jsonString"]);
+        const ctxs = res.map((r) => r.context).sort();
+        expect(ctxs).toEqual(["jsonString", "jsonStructure"]);
     });
 
     test("returns empty when marker absent", () => {
         const res = det(`{"key":"VALUE"}`, ["jsonString"], "", "REF", "");
         expect(res).toHaveLength(0);
+    });
+
+    test("Bug #3: structure chars detected even when \" disrupts string state", () => {
+        // Simulates the probe response where " marker toggles string state
+        // making subsequent markers appear as jsonString instead of jsonStructure.
+        // After the fix, both contexts are reported regardless.
+        const body = `{"val":PRE"SUF,PRE,SUF}PRE}SUF]PRE]SUF:PRE:SUF}`;
+        const gen = new JsonResponseBodyPayloadGenerator(body);
+        const commaRes = gen.detect(sdk(), { context: ["jsonStructure"] }, "PRE", ",", "SUF");
+        expect(commaRes.length).toBeGreaterThan(0);
+        // Even if _isInsideJsonString says "jsonString" due to the " marker,
+        // detect() now reports it without filtering
+        const allContexts = commaRes.map(r => r.context);
+        expect(allContexts.length).toBeGreaterThan(0);
     });
 });

@@ -121,10 +121,11 @@ export async function run(
     // Unified finding creation (avoid duplicates)
     if (hasLiteral || (LOG_UNCONFIRMED_FINDINGS && encodedSignals?.length)) {
         const endpoint = buildEndpoint(request);
+        const method = request.getMethod?.() || "GET";
         const keyParts = reflectedParameters
             .map(r => `${r.name}@${(r.context || "").toLowerCase()}`)
             .sort();
-        const dedupeKey = `${endpoint}|${keyParts.join(",")}`;
+        const dedupeKey = `${method}:${endpoint}|${keyParts.join(",")}`;
         await sdk.findings.create({
             title: hasLiteral ? "Reflected parameters" : "Encoded reflections (informational)",
             reporter: "Reflector++",

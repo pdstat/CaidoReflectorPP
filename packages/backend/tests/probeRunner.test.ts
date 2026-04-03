@@ -208,6 +208,176 @@ describe("runProbes()", () => {
     expect(result.successfulChars.has('i')).toBe(false);
   });
 
+  test("Bug #1: decoded needle found in HTML response sets reflected=true", async () => {
+    // Server decodes %3C to <, so decoded needle should match even for HTML responses
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + ch + suf) ? [{ context: 'html', char: ch }] : []
+    );
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    // Response contains the DECODED form (pre + < + suf), not the encoded form (pre + %3C + suf)
+    const decodedNeedle = "R".repeat(5) + "<" + "R".repeat(5);
+    const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + decodedNeedle) }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["html"], payload: ["<"] },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "html"
+    );
+    expect(result.reflected).toBe(true);
+    expect(result.confirmed).toBe(true);
+    expect(result.successfulChars.has("<")).toBe(true);
+  });
+
+  test("JSON string sealed: structural chars removed when \" and \\ escaped", async () => {
+    // Simulate JSON.stringify: " and \ are NOT reflected, but , } ] : are
+    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    jsonDetectImpl.mockImplementation((pre, ch, suf, body) => {
+      if (ch === '"' || ch === '\\') return []; // escaped by server
+      if (body.includes(pre + encodeURIComponent(ch) + suf))
+        return [{ context: 'jsonString', char: ch }];
+      return [];
+    });
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const allChars = ['"', '\\', ',', '}', ']', ':', ''];
+    const bodyContent = baselineBody + allChars
+      .filter(ch => ch !== '"' && ch !== '\\')
+      .map(ch => responseBodyNeedle(ch)).join('');
+    const sdk = buildSdk(async () => ({
+      response: buildResponse(bodyContent, 200, 'application/json')
+    }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["jsonString"], payload: allChars },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "JSON String"
+    );
+    // Structural chars removed because quote breakout impossible
+    expect(result.successfulChars.has(',')).toBe(false);
+    expect(result.successfulChars.has('}')).toBe(false);
+    expect(result.successfulChars.has(']')).toBe(false);
+    expect(result.successfulChars.has(':')).toBe(false);
+    // Only alphanumeric (empty) may remain
+    expect(result.confirmed).toBe(false);
+  });
+
+  test("JSON string NOT sealed: structural chars kept when \" reflects", async () => {
+    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    jsonDetectImpl.mockImplementation((pre, ch, suf, body) => {
+      if (body.includes(pre + encodeURIComponent(ch) + suf))
+        return [{ context: 'jsonString', char: ch }];
+      return [];
+    });
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const allChars = ['"', ',', '}'];
+    const bodyContent = baselineBody + allChars.map(ch => responseBodyNeedle(ch)).join('');
+    const sdk = buildSdk(async () => ({
+      response: buildResponse(bodyContent, 200, 'application/json')
+    }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["jsonString"], payload: allChars },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "JSON String"
+    );
+    expect(result.confirmed).toBe(true);
+    expect(result.successfulChars.has('"')).toBe(true);
+    expect(result.successfulChars.has(',')).toBe(true);
+    expect(result.successfulChars.has('}')).toBe(true);
+  });
+
+  test("JSON structure context: structural chars always kept", async () => {
+    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    jsonDetectImpl.mockImplementation((pre, ch, suf, body) => {
+      if (ch === '"' || ch === '\\') return []; // even if escaped
+      if (body.includes(pre + encodeURIComponent(ch) + suf))
+        return [{ context: 'jsonStructure', char: ch }];
+      return [];
+    });
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const allChars = ['"', '\\', ',', '}'];
+    const bodyContent = baselineBody + [',', '}'].map(ch => responseBodyNeedle(ch)).join('');
+    const sdk = buildSdk(async () => ({
+      response: buildResponse(bodyContent, 200, 'application/json')
+    }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["jsonStructure"], payload: allChars },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "JSON Structure"
+    );
+    // Structure context: structural chars always exploitable
+    expect(result.confirmed).toBe(true);
+    expect(result.successfulChars.has(',')).toBe(true);
+    expect(result.successfulChars.has('}')).toBe(true);
+  });
+
+  test("jsonInQuote sealed: structural chars removed, < also absent", async () => {
+    // Simulates /json-script-escaped: JSON.stringify + \u003c
+    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) => {
+      if (ch === '"' || ch === '\\' || ch === '<') return []; // all escaped
+      if (body.includes(pre + encodeURIComponent(ch) + suf))
+        return [{ context: 'jsonInQuote', char: ch }];
+      return [];
+    });
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const allChars = ['"', '\\', '<', ',', '}', ']', ':', ''];
+    const bodyContent = baselineBody + [',', '}', ']', ':', '']
+      .map(ch => responseBodyNeedle(ch)).join('');
+    const sdk = buildSdk(async () => ({
+      response: buildResponse(bodyContent, 200, 'text/html')
+    }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["jsonInQuote"], payload: allChars },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "JSON Script Block (string)"
+    );
+    expect(result.successfulChars.has(',')).toBe(false);
+    expect(result.successfulChars.has('}')).toBe(false);
+    expect(result.confirmed).toBe(false);
+  });
+
   test("JSON responses use JsonResponseBodyPayloadGenerator", async () => {
     const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
     mockDetectImpl.mockImplementation(() => []);

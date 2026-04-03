@@ -114,7 +114,6 @@ const JsonResponseBodyPayloadGenerator = class {
          * returns { context: "jsonStructure", char: "REF" }.
          */
         sdk.console.log?.(`[Reflector++] Json detect looking for payload=${payload} with prefix=${prefix} and suffix=${suffix}`);
-        const requested = new Set(context.context);
         const resultContexts = new Set<string>();
         const marker = `${prefix}${payload}${suffix}`;
         if (!marker) {
@@ -125,9 +124,7 @@ const JsonResponseBodyPayloadGenerator = class {
             let idx = -1;
             while ((idx = this.body.indexOf(variant, idx + 1)) !== -1) {
                 const ctx = this._isInsideJsonString(idx) ? "jsonString" : "jsonStructure";
-                if (requested.size === 0 || requested.has(ctx)) {
-                    resultContexts.add(ctx);
-                }
+                resultContexts.add(ctx);
             }
         }
         sdk.console.log?.(`[Reflector++] Json detect payload=${payload} contexts=${Array.from(resultContexts).join(", ")}`);

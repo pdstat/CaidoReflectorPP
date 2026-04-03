@@ -18,10 +18,26 @@ export function resolveBestContext(
         else if (ctxArr.includes('cssInQuote')) bestContext = 'Style String (")';
         else if (ctxArr.includes('css')) bestContext = 'Style';
         else if (ctxArr.includes('jsonStructure')) bestContext = 'JSON Structure';
+        else if (ctxArr.includes('eventHandlerAttrInQuote')) bestContext = 'Event Handler Attribute (quoted)';
+        else if (ctxArr.includes('eventHandlerAttr')) bestContext = 'Event Handler Attribute (unquoted)';
         else if (ctxArr.includes('eventHandler')) bestContext = 'Event Handler Attribute';
+        else if (ctxArr.includes('urlAttrInQuote')) bestContext = 'URL Attribute (quoted)';
+        else if (ctxArr.includes('urlAttr')) bestContext = 'URL Attribute (unquoted)';
+        else if (ctxArr.includes('cssUrl')) bestContext = 'CSS url()';
+        else if (ctxArr.includes('styleAttrInQuote')) bestContext = 'Style Attribute (quoted)';
+        else if (ctxArr.includes('styleAttr')) bestContext = 'Style Attribute (unquoted)';
+        else if (ctxArr.includes('srcsetUrlInQuote')) bestContext = 'Srcset Attribute (quoted)';
+        else if (ctxArr.includes('srcsetUrl')) bestContext = 'Srcset Attribute (unquoted)';
+        else if (ctxArr.includes('metaRefresh')) bestContext = 'Meta Refresh URL';
+        else if (ctxArr.includes('srcdocHtmlInQuote')) bestContext = 'Iframe Srcdoc (quoted)';
+        else if (ctxArr.includes('srcdocHtml')) bestContext = 'Iframe Srcdoc (unquoted)';
+        else if (ctxArr.includes('templateHtml')) bestContext = 'Template HTML';
+        else if (ctxArr.includes('jsonInQuote')) bestContext = 'JSON Script Block (string)';
+        else if (ctxArr.includes('json')) bestContext = 'JSON Script Block';
         else if (ctxArr.includes('attributeInQuote')) bestContext = 'Tag Attribute (quoted) Value';
         else if (ctxArr.includes('attribute')) bestContext = 'Tag Attribute (unquoted) Value';
         else if (ctxArr.includes('attributeEscaped')) bestContext = 'Tag Attribute (encoded)';
+        else if (ctxArr.includes('htmlComment')) bestContext = 'HTML Comment';
         else if (ctxArr.includes('html')) bestContext = 'HTML';
     }
     return bestContext;

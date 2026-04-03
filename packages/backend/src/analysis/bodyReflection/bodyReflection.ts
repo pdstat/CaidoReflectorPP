@@ -71,7 +71,14 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
     if (confirmed) {
       const allowedChars = Array.from(probeChars);
       const { confidence, severity, total } = scoreFinding({ confirmed, allowedChars, context: resolvedCtx, header: false, matchCount: baselineMatches.length, bodyLength: bodyText.length, stableProbe: probeWasStable });
-      reflectedParameters.push({ name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, confirmed: true, certainty: total, confidence, severity, score: total });
+      const otherContexts: Record<string, number> = {};
+      if (contextInfo?.context) {
+        for (const c of contextInfo.context) {
+          if (c !== resolvedCtx) otherContexts[c] = baselineMatches.length;
+        }
+      }
+      const hasOther = Object.keys(otherContexts).length > 0;
+      reflectedParameters.push({ name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, confirmed: true, certainty: total, confidence, severity, score: total, otherContexts: hasOther ? otherContexts : undefined });
     } else if (logUnconfirmed && reflected) {
       sdk.console.log(`[Reflector++] Logging unconfirmed reflection for "${param.key}" (probe markers reflected, no dangerous chars confirmed)`);
       const { confidence, severity, total } = scoreFinding({ confirmed: false, allowedChars: [], context: resolvedCtx, header: false, matchCount: baselineMatches.length, bodyLength: bodyText.length, stableProbe: probeWasStable });
