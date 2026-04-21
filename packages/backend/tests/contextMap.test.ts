@@ -27,6 +27,31 @@ describe("contextMap.toCanonical", () => {
     expect(toCanonical(input)).toBe(expected);
   });
 
+  const resolutionCases: Array<[string, string]> = [
+    ['Script String (")', "jsInQuote"],
+    ['Style String (")', "cssInQuote"],
+    ["Event Handler Attribute (quoted)", "eventHandler"],
+    ["Event Handler Attribute (unquoted)", "eventHandler"],
+    ["Event Handler Attribute", "eventHandler"],
+    ["URL Attribute (quoted)", "attributeInQuote"],
+    ["URL Attribute (unquoted)", "attribute"],
+    ["CSS url()", "css"],
+    ["Style Attribute (quoted)", "cssInQuote"],
+    ["Style Attribute (unquoted)", "css"],
+    ["Srcset Attribute (quoted)", "attributeInQuote"],
+    ["Meta Refresh URL", "attributeInQuote"],
+    ["Iframe Srcdoc (quoted)", "html"],
+    ["Template HTML", "html"],
+    ["JSON Script Block (string)", "jsonString"],
+    ["JSON Script Block", "jsonStructure"],
+    ["Tag Attribute (quoted) Value", "attributeInQuote"],
+    ["Tag Attribute (unquoted) Value", "attribute"],
+    ["Tag Attribute (encoded)", "attributeEscaped"],
+  ];
+  test.each(resolutionCases)("contextResolution: %s → %s", (input, expected) => {
+    expect(toCanonical(input)).toBe(expected);
+  });
+
   test("unknown returns undefined", () => {
     expect(toCanonical("someWeirdContextXYZ" as any)).toBeUndefined();
   });
