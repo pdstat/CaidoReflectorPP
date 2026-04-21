@@ -79,6 +79,14 @@ describe("classifySeverity", () => {
     })).toBe('high');
   });
 
+  test("confirmed Refresh header is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [],
+      context: 'Response Header', header: true,
+      headerNames: ['Refresh']
+    })).toBe('high');
+  });
+
   test("confirmed HTML with < is medium", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['<'], context: 'html'

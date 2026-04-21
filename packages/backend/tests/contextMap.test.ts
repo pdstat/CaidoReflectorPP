@@ -52,6 +52,27 @@ describe("contextMap.toCanonical", () => {
     expect(toCanonical(input)).toBe(expected);
   });
 
+  const internalCases: Array<[string, string]> = [
+    ["eventHandlerAttrInQuote", "eventHandler"],
+    ["eventHandlerAttr", "eventHandler"],
+    ["srcsetUrl", "attribute"],
+    ["srcsetUrlInQuote", "attributeInQuote"],
+    ["urlAttr", "attribute"],
+    ["urlAttrInQuote", "attributeInQuote"],
+    ["cssUrl", "css"],
+    ["styleAttr", "css"],
+    ["styleAttrInQuote", "cssInQuote"],
+    ["metaRefresh", "attributeInQuote"],
+    ["srcdocHtmlInQuote", "html"],
+    ["srcdocHtml", "html"],
+    ["templateHtml", "html"],
+    ["jsonInQuote", "jsonString"],
+    ["json", "jsonStructure"],
+  ];
+  test.each(internalCases)("internal: %s → %s", (input, expected) => {
+    expect(toCanonical(input)).toBe(expected);
+  });
+
   test("unknown returns undefined", () => {
     expect(toCanonical("someWeirdContextXYZ" as any)).toBeUndefined();
   });

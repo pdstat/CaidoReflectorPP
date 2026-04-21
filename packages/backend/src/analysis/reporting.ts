@@ -87,7 +87,9 @@ function generateAssessment(
   }
   if (canonical === CONTEXT.RESPONSE_HEADER || headers?.length) {
     const hdrLower = headers?.map(h => h.toLowerCase()) ?? [];
-    if (hdrLower.includes("location")) return "Open redirect";
+    if (hdrLower.includes("location") || hdrLower.includes("refresh")) {
+      return "Open redirect";
+    }
     if (hdrLower.includes("set-cookie")) return "Cookie injection";
     if (hdrLower.includes("content-security-policy")) return "CSP bypass";
     if (hdrLower.includes("access-control-allow-origin")) {
@@ -140,7 +142,9 @@ function generateTestPayload(
   }
   if (canonical === CONTEXT.RESPONSE_HEADER || headers?.length) {
     const hdrLower = headers?.map(h => h.toLowerCase()) ?? [];
-    if (hdrLower.includes("location")) return `https://evil.com`;
+    if (hdrLower.includes("location") || hdrLower.includes("refresh")) {
+      return `https://evil.com`;
+    }
     if (hdrLower.includes("set-cookie")) return `; domain=attacker.com`;
     return undefined;
   }

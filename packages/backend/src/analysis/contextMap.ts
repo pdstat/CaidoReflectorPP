@@ -67,6 +67,23 @@ const ALIASES: Record<string, CanonicalContext> = {
   'html comment': 'htmlComment',
   'json string': 'jsonString',
   'json structure': 'jsonStructure',
+
+  // Internal names from payload generator (appear in otherContexts)
+  'eventhandlerattrinquote': 'eventHandler',
+  'eventhandlerattr': 'eventHandler',
+  'srcseturl': 'attribute',
+  'srcseturlinquote': 'attributeInQuote',
+  'urlattr': 'attribute',
+  'urlattrinquote': 'attributeInQuote',
+  'cssurl': 'css',
+  'styleattr': 'css',
+  'styleattrinquote': 'cssInQuote',
+  'metarefresh': 'attributeInQuote',
+  'srcdochtmlinquote': 'html',
+  'srcdochtml': 'html',
+  'templatehtml': 'html',
+  'jsoninquote': 'jsonString',
+  'json': 'jsonStructure',
 };
 
 // Accept set for direct canonical names (lowercase form)

@@ -12,7 +12,7 @@ export interface SeverityInputs {
 }
 
 const HIGH_IMPACT_HEADERS = new Set([
-  'location', 'set-cookie', 'content-security-policy'
+  'location', 'refresh', 'set-cookie', 'content-security-policy'
 ]);
 
 const SCRIPT_CONTEXTS = new Set<string>([
