@@ -60,7 +60,6 @@ const makeResponse = (headers: Record<string, string | string[]>) => ({
   getHeaders: () => headers
 });
 
-// Helper expectations
 function expectHeaderFinding(f: any, name: string, headerNames: string[]) {
   expect(f.name).toBe(name);
   expect(f.context).toBe("Response Header");
@@ -68,11 +67,9 @@ function expectHeaderFinding(f: any, name: string, headerNames: string[]) {
   expect(Array.isArray(f.matches)).toBe(true);
   expect(f.matches.length).toBe(headerNames.length);
   expect(f.headers).toEqual(headerNames);
-  for (const n of ["certainty", "confidence", "severity", "score"]) {
-    expect(typeof (f as any)[n]).toBe("number");
-    expect((f as any)[n]).toBeGreaterThanOrEqual(0);
-    expect((f as any)[n]).toBeLessThanOrEqual(100);
-  }
+  expect(typeof f.confirmed).toBe("boolean");
+  expect(f.confirmed).toBe(true);
+  expect(['critical', 'high', 'medium', 'low', 'info']).toContain(f.severity);
 }
 
 describe("checkHeaderReflections", () => {

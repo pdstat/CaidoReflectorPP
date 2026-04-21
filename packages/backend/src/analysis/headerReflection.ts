@@ -1,10 +1,10 @@
-import { RequestParameter, AnalyzedReflectedParameter as BaseReflectedParameter } from "../core/types.js";
-import { scoreFinding } from "./scoring.js";
+import { RequestParameter, AnalyzedReflectedParameter } from "../core/types.js";
+import { classifySeverity } from "./scoring.js";
 import { enumerateRequestParameters } from "../utils/params.js";
 import { sendProbe } from "./bodyReflection/probes.js";
 import { ResponseHeaderPayloadGenerator } from "../payload/responseHeaderPayloadGenerator.ts";
 
-type ReflectedParameter = BaseReflectedParameter;
+type ReflectedParameter = AnalyzedReflectedParameter;
 
 export async function confirmHeaderReflection(
   originalRequest: any,
@@ -78,13 +78,12 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
     const { confirmed: confirmedHeaders, allowedChars, crlf } = await confirmHeaderReflection(request, param, potential, sdk);
     if (confirmedHeaders.length > 0) {
       const syntheticMatches: Array<[number, number]> = confirmedHeaders.map((_, i) => [i, i]);
-      const { confidence, severity, total } = scoreFinding({
+      const severity = classifySeverity({
         confirmed: true,
-        allowedChars: allowedChars,
+        allowedChars,
         context: "Response Header",
         header: true,
-        headerNames: confirmedHeaders,
-        matchCount: confirmedHeaders.length
+        headerNames: confirmedHeaders
       });
       confirmed.push({
         name: param.key,
@@ -93,10 +92,9 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
         source: param.source,
         headers: confirmedHeaders,
         aggressive: allowedChars.length ? allowedChars : undefined,
-        certainty: total,
-        confidence,
+        value: param.value,
         severity,
-        score: total
+        confirmed: true
       });
     }
   }

@@ -1,18 +1,22 @@
 // Avoid importing types from '@caido/sdk-workflow' directly (d.ts not a module under NodeNext)
 type HttpInput = any; type SDK = any; type Data = any; type RequestSpec = any;
-import { scoreFinding } from "./analysis/scoring.js";
 import { checkBodyReflections } from "./analysis/bodyReflection/bodyReflection.js";
 import { checkHeaderReflections } from "./analysis/headerReflection.js";
 import { buildEndpoint, passesContentTypeGating } from "./utils/http.js";
-import { AnalyzedReflectedParameter } from "./core/types.js";
-import { generateReport, buildEncodedSignalsSection } from "./analysis/reporting.js";
+import { AnalyzedReflectedParameter, SEVERITY_ORDER } from "./core/types.js";
+import {
+  generateReport,
+  buildEncodedSignalsSection,
+  buildRequestContextLine,
+  buildStructuredDataBlock,
+  buildFindingTitle
+} from "./analysis/reporting.js";
 import { COMMON_ANALYTICS_HOSTS_SET, COMMON_ANALYTICS_ENDPOINTS_SET } from "./core/constants.js";
 import { mergeEncodedSignals } from "./analysis/mergeEncodedSignals.js";
 import { CONTEXT } from "./analysis/contextMap.js";
 import { getEncodedSignals } from "./analysis/encodedSignalsStore.js";
 import { ConfigStore } from "./stores/configStore.js";
 
-// Use unified analyzed reflected parameter type
 type ReflectedParameter = AnalyzedReflectedParameter;
 
 // Pre-resolved host / endpoint sets (fixed spelling)
@@ -72,7 +76,6 @@ export async function run(
     if (LOG_UNCONFIRMED_FINDINGS && encodedSignals?.length) {
         const merged = mergeEncodedSignals(encodedSignals);
         for (const [name, m] of merged.entries()) {
-            // Pick a representative escaped context to score
             let ctx: string;
             if (m.contexts.has(CONTEXT.ATTRIBUTE_ESCAPED)) {
                 ctx = CONTEXT.ATTRIBUTE_ESCAPED;
@@ -83,56 +86,73 @@ export async function run(
             } else {
                 ctx = CONTEXT.HTML;
             }
-
-            // Low severity, unconfirmed (encoded) finding
-            const { confidence, severity, total } = scoreFinding({
-                confirmed: false,
-                allowedChars: [],
+            reflectedParameters.push({
+                name,
+                matches: new Array(m.count).fill([0, 0]) as Array<[number, number]>,
                 context: ctx,
-                header: false,
-                matchCount: m.count,
-                bodyLength: response.getBody()?.toText()?.length ?? 0,
-                stableProbe: false
+                source: m.source as ReflectedParameter["source"],
+                confirmed: false,
+                severity: 'info'
             });
-
-            reflectedParameters.push({ name, matches: new Array(m.count).fill([0, 0]) as any, context: ctx, aggressive: undefined, source: m.source as any, confirmed: false, certainty: total, confidence, severity, score: total });
         }
     }
 
     const hasLiteral = reflectedParameters.length > 0;
-    let details = "";
+    const hasEncoded = LOG_UNCONFIRMED_FINDINGS && !!encodedSignals?.length;
 
-    if (hasLiteral) {
+    if (hasLiteral || hasEncoded) {
         sdk.console.log(`[Reflector++] Found ${reflectedParameters.length} reflected parameter(s)`);
-        details += "The following parameters were reflected in the response:\n";
-        details += "--------\n";
-        for (const p of reflectedParameters) details += generateReport(p) + "\n";
-    } else {
-        sdk.console.log("[Reflector++] No reflected parameters found");
-        details += "No confirmed literal reflections detected.\n";
-    }
 
-    // Append encoded signal section if enabled
-    if (LOG_UNCONFIRMED_FINDINGS && encodedSignals?.length) {
-        // buildEncodedSignalsSection is statically imported above
-        details += buildEncodedSignalsSection(encodedSignals);
-    }
-
-    // Unified finding creation (avoid duplicates)
-    if (hasLiteral || (LOG_UNCONFIRMED_FINDINGS && encodedSignals?.length)) {
         const endpoint = buildEndpoint(request);
         const method = request.getMethod?.() || "GET";
+        const statusCode = response.getCode?.() ?? 0;
+        const bodyText = response.getBody()?.toText() || "";
+        const ctHeader = rawContentType;
+        const cspHeader = response.getHeader("Content-Security-Policy");
+        const xctoHeader = rawNoSniff;
+        const contentType = Array.isArray(ctHeader)
+            ? ctHeader[0] : (typeof ctHeader === "string" ? ctHeader : undefined);
+        const csp = Array.isArray(cspHeader)
+            ? cspHeader[0] : (typeof cspHeader === "string" ? cspHeader : undefined);
+        const xcto = Array.isArray(xctoHeader)
+            ? xctoHeader[0] : (typeof xctoHeader === "string" ? xctoHeader : undefined);
+
+        let description = buildRequestContextLine({
+            method, url: endpoint, statusCode, contentType, csp, xcto
+        });
+        description += '\n\n---\n\n';
+
+        reflectedParameters.sort(
+            (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
+        );
+
+        for (const p of reflectedParameters) {
+            description += generateReport(p, bodyText) + '\n\n---\n\n';
+        }
+
+        if (hasEncoded) {
+            description += buildEncodedSignalsSection(encodedSignals);
+            description += '\n\n---\n\n';
+        }
+
+        description += buildStructuredDataBlock(reflectedParameters);
+
+        const title = buildFindingTitle(reflectedParameters, hasLiteral);
+
         const keyParts = reflectedParameters
             .map(r => `${r.name}@${(r.context || "").toLowerCase()}`)
             .sort();
         const dedupeKey = `${method}:${endpoint}|${keyParts.join(",")}`;
+
         await sdk.findings.create({
-            title: hasLiteral ? "Reflected parameters" : "Encoded reflections (informational)",
+            title,
             reporter: "Reflector++",
             request,
-            description: details,
+            description,
             dedupeKey
         });
+    } else {
+        sdk.console.log("[Reflector++] No reflected parameters found");
     }
 
 }

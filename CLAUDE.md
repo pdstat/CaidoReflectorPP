@@ -72,6 +72,53 @@ TypeScript source uses ESM with `.js` extensions in imports (e.g., `import { foo
 
 Jest with ts-jest (ESM preset). All tests live in `packages/backend/tests/`. Tests cover analysis logic, stores, utilities, and payload generation — no integration tests against Caido SDK (SDK types are mocked or typed as `any`).
 
+## Integration Testing with vuln-reflector
+
+**vuln-reflector** (`/mnt/d/hacking/vuln-reflector`) is a deliberately vulnerable Express 5 server that serves as the integration test harness for Reflector++. It reflects user input across ~55 distinct injection contexts without sanitization.
+
+### Starting vuln-reflector
+
+```bash
+cd /mnt/d/hacking/vuln-reflector && node server.js
+```
+
+This starts two servers:
+- **Port 4444** — Express HTTP server (~40 GET/POST endpoints)
+- **Port 4445** — Raw TCP server (CRLF injection testing)
+
+### How it works
+
+Every endpoint accepts any query/body parameter name and reflects the first non-empty value into a specific context (HTML text, attributes, JS, CSS, JSON, headers, etc.). The root endpoint `/` lists all available endpoints.
+
+### Endpoint categories
+
+| Category | Examples | Count |
+|----------|----------|-------|
+| HTML body | `/html`, `/attr-quoted`, `/js`, `/css`, `/event-handler`, `/template` | ~25 |
+| JSON response | `/json-string`, `/json-structure`, `/json-key`, `/json-multi` | 10 |
+| Header reflection | `/header-location`, `/header-set-cookie`, `/header-csp`, `/header-cors` | 7 |
+| Encoded-only | `/encoded-url`, `/encoded-html`, `/encoded-json-unicode` | 3 |
+| Escaped variants | `/srcset-escaped`, `/srcdoc-escaped`, `/json-script-escaped` | 7 |
+| Multi-context | `/multi` (6 contexts in one response) | 1 |
+| POST variants | `POST /html`, `POST /js-in-quote` | 2 |
+| Cookie reflection | `/cookie-reflect` (reflects `username` cookie) | 1 |
+| CRLF (port 4445) | `/header-crlf`, `/header-crlf-location` | 2 |
+
+### Mandatory testing workflow for new features
+
+When adding new detection capabilities to Reflector++:
+
+1. **Add a test endpoint** to vuln-reflector's `server.js` that exercises the new reflection type
+2. **Build the plugin** (`pnpm build`) and load it in Caido
+3. **Start vuln-reflector** and proxy traffic through Caido to the test endpoint
+4. **Validate findings** using `caido-mode` — retrieve Caido findings to confirm the new reflection is detected correctly with the expected context, severity, and confirmation status
+
+This ensures every detection capability has a corresponding integration test target.
+
+### Known test gaps
+
+`/mnt/d/hacking/vuln-reflector/reflector-bugs.md` tracks known detection gaps in Reflector++ against this harness.
+
 ## Caido SDK & Developer Docs
 
 - Developer documentation: https://developer.caido.io

@@ -1,127 +1,317 @@
-import { ReflectedParameter as BaseReflectedParameter } from "../core/types.js";
-import { ScoreResult, ScoreDelta } from "./scoring.js";
-import { mergeEncodedSignals } from "./mergeEncodedSignals.js";
-import { prettyPrintContext } from "./contextMap.js";
+import {
+  AnalyzedReflectedParameter,
+  SeverityTier,
+  SEVERITY_ORDER
+} from "../core/types.js";
+import { prettyPrintContext, toCanonical, CONTEXT } from "./contextMap.js";
+import { mergeEncodedSignals, EncodedSignalEntry } from "./mergeEncodedSignals.js";
 
-/**
- * Extended reflected parameter interface to include scoring & auxiliary fields
- * added at runtime during analysis.
- */
-export interface ReportReflectedParameter extends BaseReflectedParameter {
-  confirmed?: boolean;
-  confidence?: number;
-  severity?: number;
-  score?: number;          // alias for certainty/total scoring percentage
-  otherContexts?: Record<string, number>; // optional: secondary literal contexts
-  headers?: string[];      // for header reflections
-  aggressive?: string[];   // allowed characters (literal proven)
-  // Extended scoring (if caller passed full ScoreResult alongside legacy fields)
-  categories?: ScoreResult['categories'];
-  rationale?: ScoreResult['rationale'];
-  modelVersion?: string;
+export { prettyPrintContext as canonicalizeContext };
+
+export interface RequestContext {
+  method: string;
+  url: string;
+  statusCode: number;
+  contentType?: string;
+  csp?: string;
+  xcto?: string;
 }
 
-/** Canonicalize internal context identifiers into human readable labels */
-export function canonicalizeContext(ctx?: string): string | undefined {
-  if (!ctx) return undefined;
-  return prettyPrintContext(ctx);
+function tierLabel(tier: SeverityTier): string {
+  return tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
-function formatOtherContexts(other?: Record<string, number>): string | undefined {
-  if (!other) return undefined;
-  const items = Object.entries(other)
-    .filter(([k, c]) => k && c > 0)
-    .sort((a, b) => b[1] - a[1])
-    .map(([k, c]) => `${canonicalizeContext(k) ?? k} ×${c}`);
-  return items.length ? `; also in ${items.join(", ")}` : undefined;
+function formatChar(ch: string): string {
+  if (ch === " ") return "`space`";
+  if (ch === "") return "`alphanumeric`";
+  return `\`${ch}\``;
 }
 
-/** Build a per-parameter report block (string) */
-export function generateReport(param: ReportReflectedParameter): string {
-  const { name, matches, context, aggressive, source, headers } = param;
-  const prettyContext = canonicalizeContext(context);
-  const alsoIn = formatOtherContexts(param.otherContexts);
-  const count = Array.isArray(matches) ? matches.length : 0;
-  const total = (param as any).score ?? (param as any).certainty; // numeric value
-  const conf = param.confidence;
-  const sev = param.severity;
-  const categories = param.categories;
-  // Compact main line per requirement E
-  // token: 2 reflections | Context: Tag Attribute (encoded) | Score: 71% (strong) [Conf 55% (high), Sev 100% (critical)]
-  const unconfirmedTag = param.confirmed === false ? '[UNCONFIRMED] ' : '';
-  let line = `${unconfirmedTag}${name}: ${count} reflection${count === 1 ? '' : 's'}`;
-  if (prettyContext) line += ` | Context: ${prettyContext}`;
-  if (alsoIn) line += ` ${alsoIn}`; // retains "; also in ..." text
-  if (headers && headers.length) line += ` | Headers: ${headers.join(', ')}`;
-  if (typeof total === 'number') {
-    const totalPct = Math.round(total);
-    const totalCat = categories?.total ? ` (${categories.total})` : '';
-    line += ` | Score: ${totalPct}%${totalCat}`;
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
+}
+
+function escapeMarkdown(s: string): string {
+  return s.replace(/[`|\\]/g, c => `\\${c}`);
+}
+
+function generateAssessment(
+  context: string,
+  chars: string[],
+  headers?: string[]
+): string {
+  const canonical = toCanonical(context) ?? context;
+  const hasQuote = chars.includes('"') || chars.includes("'");
+  const hasLt = chars.includes('<');
+  const quote = chars.includes('"') ? '"' : "'";
+
+  if (canonical === CONTEXT.JS_IN_QUOTE) {
+    const parts: string[] = [];
+    if (hasQuote) parts.push(`String breakout via \`${quote}\``);
+    if (hasLt) parts.push("script escape via `<`");
+    if (parts.length) return parts.join(", ");
+    return "Script string reflection, no breakout chars confirmed";
   }
-  const parts: string[] = [];
-  if (typeof conf === 'number') parts.push(`Conf ${Math.round(conf)}%${categories?.confidence ? ` (${categories.confidence})` : ''}`);
-  if (typeof sev === 'number') parts.push(`Sev ${Math.round(sev)}%${categories?.severity ? ` (${categories.severity})` : ''}`);
-  if (parts.length) line += ` [${parts.join(', ')}]`;
-  if (source) line += ` | Source: ${source}`;
-  if (param.modelVersion) line += ` | Model ${param.modelVersion}`;
-  line += `\n`;
-
-  // Rationale (compact, always shown when available — no verbose toggle implemented)
-  const rat = param.rationale;
-  if (rat) {
-    const fmtGroup = (label: string, arr: ScoreDelta[] | undefined) => {
-      if (!arr || !arr.length) return '';
-      const lines = arr.map(d => {
-        const sign = d.delta >= 0 ? '+' : '';
-        return `    - ${d.label}: ${sign}${d.delta}`;
-      });
-      return `  ${label}:\n${lines.join('\n')}\n`;
-    };
-    line += fmtGroup('Confidence factors', rat.confidence);
-    line += fmtGroup('Severity factors', rat.severity);
-    line += fmtGroup('Penalties / clamps', rat.penalties);
+  if (canonical === CONTEXT.JS) {
+    if (hasLt) return "Script escape via `<`";
+    return "Script reflection, no breakout chars confirmed";
   }
-
-  let details = line;
-  if (aggressive && aggressive.length) {
-    details += `. Allowed characters (literal, verified in this context):`;
-    for (const ch of aggressive) {
-      let shown;
-      if (ch === " ") {
-        shown = "'space'";
-      } else if (ch === "'") {
-        shown = `' (single quote)`;
-      } else if (ch === '"') {
-        shown = `" (double quote)`;
-      } else if (ch === "`") {
-        shown =  "` (backtick)";
-      } else if (ch === "\\") {
-        shown = "\\";
-      } else if (ch === "<") {
-        shown = "<";
-      } else if (ch === ">") {
-        shown = ">";
-      } else if (ch === "/") {
-        shown = "/";
-      } else if (ch === "") {
-        shown = "alphanumeric";
-      } else {
-        shown = `'${ch}'`;
-      }
-      details += `\n    - ${shown}`;
+  if (canonical === CONTEXT.EVENT_HANDLER) {
+    if (chars.length > 0) return "Event handler injection";
+    return "Event handler reflection, no chars confirmed";
+  }
+  if (canonical === CONTEXT.ATTRIBUTE_IN_QUOTE) {
+    if (hasQuote) return `Attribute breakout via \`${quote}\``;
+    return "Quoted attribute reflection, no quote breakout";
+  }
+  if (canonical === CONTEXT.ATTRIBUTE) {
+    if (chars.includes(' ')) return "Unquoted attribute injection";
+    return "Unquoted attribute reflection";
+  }
+  if (canonical === CONTEXT.HTML) {
+    if (hasLt) return "Tag injection possible";
+    return "HTML reflection, no tag injection chars";
+  }
+  if (canonical === CONTEXT.HTML_COMMENT) {
+    return "HTML comment reflection";
+  }
+  if (canonical === CONTEXT.CSS || canonical === CONTEXT.CSS_IN_QUOTE) {
+    return "Style injection";
+  }
+  if (canonical === CONTEXT.JSON_STRUCTURE) {
+    return "JSON structure injection";
+  }
+  if (canonical === CONTEXT.JSON_STRING) {
+    return "JSON string reflection (escaped)";
+  }
+  if (canonical === CONTEXT.RESPONSE_HEADER || headers?.length) {
+    const hdrLower = headers?.map(h => h.toLowerCase()) ?? [];
+    if (hdrLower.includes("location")) return "Open redirect";
+    if (hdrLower.includes("set-cookie")) return "Cookie injection";
+    if (hdrLower.includes("content-security-policy")) return "CSP bypass";
+    if (hdrLower.includes("access-control-allow-origin")) {
+      return "CORS misconfiguration";
     }
-    details += `\n`;
+    return "Response header reflection";
   }
-  return details;
+  return "Reflection detected";
 }
 
-/** Merge encoded signal entries (duplicates by name) into summary lines */
-export function buildEncodedSignalsSection(encodedSignals: Array<{ name: string; source: string; contexts: string[]; evidence: string[]; count: number; }> | undefined): string {
+function generateTestPayload(
+  context: string,
+  chars: string[],
+  headers?: string[]
+): string | undefined {
+  const canonical = toCanonical(context) ?? context;
+  const hasQuote = chars.includes('"') || chars.includes("'");
+  const hasLt = chars.includes('<');
+  const quote = chars.includes('"') ? '"' : "'";
+
+  if (canonical === CONTEXT.JS_IN_QUOTE) {
+    if (hasQuote && hasLt) {
+      return `${quote}</script><svg onload=alert(1)>`;
+    }
+    if (hasQuote) return `${quote}-alert(1)-${quote}`;
+    if (hasLt) return `</script><svg onload=alert(1)>`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.JS) {
+    if (hasLt) return `</script><svg onload=alert(1)>`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.EVENT_HANDLER) {
+    if (chars.length > 0) return `)-alert(1)-(`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.ATTRIBUTE_IN_QUOTE) {
+    if (hasQuote) {
+      return `${quote} onfocus=alert(1) autofocus=${quote}`;
+    }
+    return undefined;
+  }
+  if (canonical === CONTEXT.ATTRIBUTE) {
+    if (chars.includes(' ')) return `x onfocus=alert(1) autofocus`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.HTML) {
+    if (hasLt) return `<img src=x onerror=alert(1)>`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.RESPONSE_HEADER || headers?.length) {
+    const hdrLower = headers?.map(h => h.toLowerCase()) ?? [];
+    if (hdrLower.includes("location")) return `https://evil.com`;
+    if (hdrLower.includes("set-cookie")) return `; domain=attacker.com`;
+    return undefined;
+  }
+  return undefined;
+}
+
+function buildSnippets(
+  matches: Array<[number, number]>,
+  body: string,
+  maxSnippets = 3
+): string[] {
+  if (!body) return [];
+  const snippets: string[] = [];
+  const limit = Math.min(matches.length, maxSnippets);
+  for (let i = 0; i < limit; i++) {
+    const [start, end] = matches[i];
+    if (start === 0 && end === 0 && matches.length > 1) continue;
+    const lo = Math.max(0, start - 40);
+    const hi = Math.min(body.length, end + 40);
+    const prefix = lo > 0 ? "..." : "";
+    const suffix = hi < body.length ? "..." : "";
+    const slice = body.slice(lo, hi).replace(/\n/g, " ");
+    snippets.push(
+      `\`${prefix}${escapeMarkdown(slice)}${suffix}\` (offset ${start})`
+    );
+  }
+  return snippets;
+}
+
+export function generateReport(
+  param: AnalyzedReflectedParameter,
+  responseBody?: string
+): string {
+  const pretty = prettyPrintContext(param.context) ?? param.context;
+  const count = Array.isArray(param.matches) ? param.matches.length : 0;
+  const tier = tierLabel(param.severity);
+  const status = param.confirmed ? "**Confirmed**" : "**Unconfirmed**";
+
+  let out = `### ${param.name} · ${pretty} · ${tier}\n`;
+
+  const meta: string[] = [];
+  if (param.source) meta.push(`**Source:** ${param.source}`);
+  if (param.value != null) {
+    meta.push(`**Value:** \`${truncate(param.value, 60)}\``);
+  }
+  meta.push(status);
+  meta.push(`${count} reflection${count === 1 ? "" : "s"}`);
+  out += meta.join(" · ") + "\n";
+
+  if (param.otherContexts) {
+    const others = Object.entries(param.otherContexts)
+      .filter(([, c]) => c > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, c]) => `${prettyPrintContext(k) ?? k} ×${c}`)
+      .join(", ");
+    if (others) out += `Also in: ${others}\n`;
+  }
+
+  if (param.headers?.length) {
+    out += `**Headers:** ${param.headers.join(", ")}\n`;
+  }
+
+  if (param.aggressive?.length) {
+    out += `\n**Reflected chars:** ${param.aggressive.map(formatChar).join(" ")}\n`;
+  }
+
+  const assessment = generateAssessment(
+    param.context, param.aggressive ?? [], param.headers
+  );
+  const payload = generateTestPayload(
+    param.context, param.aggressive ?? [], param.headers
+  );
+  const quoteParts = [assessment];
+  if (payload) quoteParts.push(`Test: \`${payload}\``);
+  out += `\n> ${quoteParts.join(". ")}\n`;
+
+  if (responseBody) {
+    const snippets = buildSnippets(param.matches, responseBody);
+    if (snippets.length) {
+      out += `\n**Snippets:**\n`;
+      snippets.forEach((s, i) => { out += `${i + 1}. ${s}\n`; });
+    }
+  }
+
+  return out;
+}
+
+export function buildRequestContextLine(ctx: RequestContext): string {
+  const parts = [
+    `\`${ctx.method}\``,
+    `\`${ctx.url}\``,
+    `\`${ctx.statusCode}\``
+  ];
+  if (ctx.contentType) {
+    const ct = ctx.contentType.split(";")[0].trim();
+    parts.push(`\`${ct}\``);
+  }
+  if (!ctx.csp) parts.push("No CSP");
+  if (!ctx.xcto) parts.push("No X-Content-Type-Options");
+  return parts.join(" · ");
+}
+
+function decodeEvidence(enc: string): string | undefined {
+  const urlMatch = enc.match(/^%([0-9a-f]{2})$/i);
+  if (urlMatch) {
+    return String.fromCharCode(parseInt(urlMatch[1], 16));
+  }
+  const uniMatch = enc.match(/^\\u([0-9a-f]{4})$/i);
+  if (uniMatch) {
+    return String.fromCharCode(parseInt(uniMatch[1], 16));
+  }
+  const entityMap: Record<string, string> = {
+    "&lt;": "<", "&gt;": ">", "&amp;": "&",
+    "&quot;": '"', "&#39;": "'"
+  };
+  if (entityMap[enc]) return entityMap[enc];
+  return undefined;
+}
+
+export function buildEncodedSignalsSection(
+  encodedSignals: EncodedSignalEntry[] | undefined
+): string {
   if (!encodedSignals?.length) return "";
   const merged = mergeEncodedSignals(encodedSignals);
-  let out = "\nEncoded reflections (informational):\n";
+  let out = "#### Encoded reflections (informational)\n";
   for (const { name, contexts, evidence, count } of merged.values()) {
-    out += `- ${name} → ${Array.from(contexts).join(", ")} (matches≈${count}; evidence: ${Array.from(evidence).join(", ")})\n`;
+    const prettyContexts = Array.from(contexts)
+      .map(c => prettyPrintContext(c) ?? c)
+      .join(", ");
+    const pairs = Array.from(evidence).map(e => {
+      const decoded = decodeEvidence(e);
+      return decoded ? `\`${e}\`→\`${decoded}\`` : `\`${e}\``;
+    }).join(", ");
+    out += `- **${name}** → ${prettyContexts} (≈${count} matches · ${pairs})\n`;
   }
   return out;
+}
+
+export function buildStructuredDataBlock(
+  params: AnalyzedReflectedParameter[]
+): string {
+  const data = params.map(p => ({
+    param: p.name,
+    source: p.source ?? "URL",
+    context: p.context,
+    severity: p.severity,
+    confirmed: p.confirmed,
+    chars: p.aggressive ?? [],
+    reflections: Array.isArray(p.matches) ? p.matches.length : 0
+  }));
+  return `<!-- REFLECTOR_DATA\n${JSON.stringify(data)}\n-->`;
+}
+
+export function buildFindingTitle(
+  params: AnalyzedReflectedParameter[],
+  hasLiteral: boolean
+): string {
+  if (!params.length) return "Encoded reflections (informational)";
+
+  const sorted = [...params].sort(
+    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
+  );
+  const topTier = sorted[0].severity;
+
+  const confirmed = sorted.filter(p => p.confirmed);
+  const display = confirmed.length ? confirmed : sorted;
+  const names = display.slice(0, 2).map(p => `"${p.name}"`);
+  const contexts = [
+    ...new Set(display.slice(0, 2).map(p => prettyPrintContext(p.context) ?? p.context))
+  ];
+
+  const prefix = hasLiteral ? "Reflected" : "Encoded reflections";
+  return `${prefix}: ${names.join(", ")} in ${contexts.join(", ")} (${tierLabel(topTier)})`;
 }
