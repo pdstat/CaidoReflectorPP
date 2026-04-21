@@ -6,6 +6,7 @@ import { buildEndpoint } from "../../utils/http.js";
 import { enumerateRequestParameters } from "../../utils/params.js";
 import { KEY_WORDS } from "../../core/constants.js";
 import { classifySeverity } from "../scoring.js";
+import { toCanonical } from "../contextMap.js";
 import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
 import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 import { getTags } from "./context.js";
@@ -73,8 +74,12 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
       const severity = classifySeverity({ confirmed, allowedChars, context: resolvedCtx, header: false });
       const otherContexts: Record<string, number> = {};
       if (contextInfo?.context) {
+        const primaryCanonical = toCanonical(resolvedCtx);
         for (const c of contextInfo.context) {
-          if (c !== resolvedCtx) otherContexts[c] = baselineMatches.length;
+          const cc = toCanonical(c);
+          if (cc && cc !== primaryCanonical) {
+            otherContexts[cc] = (otherContexts[cc] ?? 0) + 1;
+          }
         }
       }
       const hasOther = Object.keys(otherContexts).length > 0;

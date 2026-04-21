@@ -198,7 +198,10 @@ export function generateReport(
     const others = Object.entries(param.otherContexts)
       .filter(([, c]) => c > 0)
       .sort((a, b) => b[1] - a[1])
-      .map(([k, c]) => `${prettyPrintContext(k) ?? k} ×${c}`)
+      .map(([k, c]) => {
+        const label = prettyPrintContext(k) ?? k;
+        return c > 1 ? `${label} ×${c}` : label;
+      })
       .join(", ");
     if (others) out += `Also in: ${others}\n`;
   }
@@ -221,7 +224,8 @@ export function generateReport(
   if (payload) quoteParts.push(`Test: \`${payload}\``);
   out += `\n> ${quoteParts.join(". ")}\n`;
 
-  if (responseBody) {
+  const canonical = toCanonical(param.context) ?? param.context;
+  if (responseBody && canonical !== CONTEXT.RESPONSE_HEADER) {
     const snippets = buildSnippets(param.matches, responseBody);
     if (snippets.length) {
       out += `\n**Snippets:**\n`;

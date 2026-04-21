@@ -95,6 +95,21 @@ describe("generateReport", () => {
     expect(out).toContain("Test: `https://evil.com`");
   });
 
+  test("header reflection skips body snippets", () => {
+    const param: any = {
+      name: "tok",
+      matches: [[0, 0]],
+      context: "Response Header",
+      headers: ["Set-Cookie"],
+      source: "URL",
+      severity: "high",
+      confirmed: true
+    };
+    const body = "<!DOCTYPE html><html><body>page</body></html>";
+    const out = generateReport(param, body);
+    expect(out).not.toContain("Snippets");
+  });
+
   test("otherContexts displayed", () => {
     const param: any = {
       name: "t",
@@ -106,7 +121,7 @@ describe("generateReport", () => {
       confirmed: true
     };
     const out = generateReport(param);
-    expect(out).toContain("Also in: Tag Attribute (quoted) Value ×3, HTML ×1");
+    expect(out).toContain("Also in: Tag Attribute (quoted) Value ×3, HTML");
   });
 
   test("value truncated at 60 chars", () => {
