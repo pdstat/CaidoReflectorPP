@@ -109,11 +109,31 @@ Every endpoint accepts any query/body parameter name and reflects the first non-
 When adding new detection capabilities to Reflector++:
 
 1. **Add a test endpoint** to vuln-reflector's `server.js` that exercises the new reflection type
-2. **Build the plugin** (`pnpm build`) and load it in Caido
-3. **Start vuln-reflector** and proxy traffic through Caido to the test endpoint
-4. **Validate findings** using `caido-mode` — retrieve Caido findings to confirm the new reflection is detected correctly with the expected context, severity, and confirmation status
+2. **Build the plugin** (`npx caido-dev build` from project root) and ask the user to update in Caido
+3. **Start vuln-reflector** and send requests via `curl -x http://127.0.0.1:8080` through the Caido proxy
+4. **Validate findings** using `caido-mode` — retrieve Caido findings to confirm detection with expected context, severity, and confirmation status
 
 This ensures every detection capability has a corresponding integration test target.
+
+### Integration testing procedure
+
+Send requests through the Caido proxy (`http://127.0.0.1:8080`) to vuln-reflector (`http://localhost:4444`):
+
+```bash
+curl -s -o /dev/null -x http://127.0.0.1:8080 "http://localhost:4444/html?xss=reflector_test123"
+```
+
+Retrieve findings with caido-mode, then verify:
+
+1. **Response verification** — curl each endpoint directly (no proxy) and confirm the reflected value appears in the expected context (HTML text, script tag, attribute, header, etc.)
+2. **REFLECTOR_DATA validation** — every finding contains a `<!-- REFLECTOR_DATA ... -->` structured data block. Verify each entry has valid `param`, `source` (URL/Body/Cookie), `context`, `severity` (critical/high/medium/low/info), `confirmed` (boolean), `chars` (array), and `reflections` (>= 1)
+3. **Severity rules** — unconfirmed must be `info`; confirmed must not be `info`; unconfirmed must have empty chars
+4. **Reflection counts** — curl the endpoint and count literal occurrences of the test value; must match the `reflections` count in REFLECTOR_DATA
+5. **Snippet accuracy** — body reflections should have snippets showing the reflected value in surrounding context; header-only reflections must NOT have body snippets
+6. **Multi-param findings** — endpoints reflecting in both headers and body (e.g., `/header-location`) should have separate REFLECTOR_DATA entries for each context
+7. **Dedupe awareness** — Caido deduplicates findings by `METHOD:URL|param@context`. Use a different parameter name (e.g., `?check=...` instead of `?xss=...`) to force new findings when retesting
+
+Batch requests with `&` and `wait` for throughput. Parallelize finding retrieval with `xargs -P`. Use `--compact` flag on caido-mode when exploring, full output when validating.
 
 ### Known test gaps
 
