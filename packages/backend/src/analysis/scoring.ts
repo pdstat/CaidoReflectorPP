@@ -1,7 +1,7 @@
 import { CONTEXT, toCanonical } from './contextMap.js';
-import { SeverityTier } from '../core/types.js';
+import type { SeverityTier } from '../core/types.js';
 
-export { SeverityTier };
+export type { SeverityTier };
 
 export interface SeverityInputs {
   confirmed: boolean;
@@ -21,12 +21,6 @@ const SCRIPT_CONTEXTS = new Set<string>([
 
 const CSS_CONTEXTS = new Set<string>([
   CONTEXT.CSS, CONTEXT.CSS_IN_QUOTE
-]);
-
-const ESCAPED_CONTEXTS = new Set<string>([
-  CONTEXT.ATTRIBUTE_ESCAPED,
-  CONTEXT.EVENT_HANDLER_ESCAPED,
-  CONTEXT.JSON_ESCAPED
 ]);
 
 function hasQuoteBreakout(chars: string[]): boolean {

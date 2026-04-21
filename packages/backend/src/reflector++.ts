@@ -1,5 +1,5 @@
 // Avoid importing types from '@caido/sdk-workflow' directly (d.ts not a module under NodeNext)
-type HttpInput = any; type SDK = any; type Data = any; type RequestSpec = any;
+type HttpInput = any; type SDK = any; type Data = any;
 import { checkBodyReflections } from "./analysis/bodyReflection/bodyReflection.js";
 import { checkHeaderReflections } from "./analysis/headerReflection.js";
 import { buildEndpoint, passesContentTypeGating } from "./utils/http.js";
