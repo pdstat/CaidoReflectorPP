@@ -502,6 +502,24 @@ const ResponseBodyPayloadGenerator = class {
 				pushed = true;
 			}
 		}
+		if (ctx.context.includes("rawtextElement")) {
+			if (markers.some((m) => this._containsTextOutsideTags(m, []))) {
+				out.push({ char: payload, context: "rawtextElement" });
+				pushed = true;
+			}
+		}
+		if (ctx.context.includes("svgContext")) {
+			if (markers.some((m) => this._containsTextOutsideTags(m, []))) {
+				out.push({ char: payload, context: "svgContext" });
+				pushed = true;
+			}
+		}
+		if (ctx.context.includes("mathContext")) {
+			if (markers.some((m) => this._containsTextOutsideTags(m, []))) {
+				out.push({ char: payload, context: "mathContext" });
+				pushed = true;
+			}
+		}
 		if (markers.some((m) => this._containsTextOutsideTags(m))) {
 			if (!pushed) out.push({ char: payload, context: "html" });
 		}
@@ -613,6 +631,24 @@ const ResponseBodyPayloadGenerator = class {
 				matched = true;
 			}
 		}
+		if (!matched && ctx.context.includes("jsTemplateLiteral")) {
+			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
+				out.push({ char: payload, context: "jsTemplateLiteral" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("importMapString")) {
+			if (this._markerInImportMap(marker, true)) {
+				out.push({ char: payload, context: "importMapString" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("importMap")) {
+			if (this._markerInImportMap(marker, false)) {
+				out.push({ char: payload, context: "importMap" });
+				matched = true;
+			}
+		}
 		if (!matched && ctx.context.includes("jsonInQuote")) {
 			if (this._markerInJsonScriptBlock(marker, true)) {
 				out.push({ char: payload, context: "jsonInQuote" });
@@ -634,6 +670,24 @@ const ResponseBodyPayloadGenerator = class {
 		if (!matched && ctx.context.includes("attribute")) {
 			if (this._markerInAnyAttr(marker)) {
 				out.push({ char: payload, context: "attribute" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("rawtextElement")) {
+			if (this._containsTextOutsideTags(marker, [])) {
+				out.push({ char: payload, context: "rawtextElement" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("svgContext")) {
+			if (this._containsTextOutsideTags(marker, [])) {
+				out.push({ char: payload, context: "svgContext" });
+				matched = true;
+			}
+		}
+		if (!matched && ctx.context.includes("mathContext")) {
+			if (this._containsTextOutsideTags(marker, [])) {
+				out.push({ char: payload, context: "mathContext" });
 				matched = true;
 			}
 		}
@@ -748,6 +802,16 @@ const ResponseBodyPayloadGenerator = class {
 				out.push({ char: payload, context: "html" });
 			}
 		}
+		if (ctx.context.includes("htmlBaseInjection") && (payload === "<" || _htmlChars.has(payload))) {
+			if (this._containsTextOutsideTags(marker)) {
+				out.push({ char: payload, context: "htmlBaseInjection" });
+			}
+		}
+		if (ctx.context.includes("domClobber")) {
+			if (this._markerInAnyAttr(marker)) {
+				out.push({ char: payload, context: "domClobber" });
+			}
+		}
 		if (ctx.context.includes("htmlComment") && _htmlChars.has(payload)
 			|| (ctx.context.includes("htmlComment") && payload === "-")) {
 			if (this.body.includes(marker)) {
@@ -773,6 +837,55 @@ const ResponseBodyPayloadGenerator = class {
 				out.push({ char: payload, context: "attribute" });
 			}
 		}
+		if (ctx.context.includes("rawtextElement")) {
+			const isClosingTag = /^<\/[a-z]+>$/i.test(payload);
+			const _rawtextChars = new Set([">", "/", '"', "'", ";"]);
+			if (isClosingTag || _rawtextChars.has(payload)) {
+				if (this.body.includes(marker)) {
+					out.push({ char: payload, context: "rawtextElement" });
+				}
+			}
+		}
+		const _svgChars = new Set(["<", ">", "/", '"', "'", ";"]);
+		if (ctx.context.includes("svgContext") && _svgChars.has(payload)) {
+			if (this._containsTextOutsideTags(marker, [])) {
+				out.push({ char: payload, context: "svgContext" });
+			}
+		}
+		if (ctx.context.includes("mathContext") && _svgChars.has(payload)) {
+			if (this._containsTextOutsideTags(marker, [])) {
+				out.push({ char: payload, context: "mathContext" });
+			}
+		}
+		const _jsUriChars = new Set(["(", ")", ";", "'", '"', "//", "\\"]);
+		if (ctx.context.includes("jsUri") && _jsUriChars.has(payload)) {
+			if (this._markerInUrlAttr(marker)) {
+				out.push({ char: payload, context: "jsUri" });
+			}
+		}
+		const _dataUriChars = new Set(["/", ",", ";", "<", ">", "'", '"']);
+		if (ctx.context.includes("dataUri") && _dataUriChars.has(payload)) {
+			if (this._markerInUrlAttr(marker)) {
+				out.push({ char: payload, context: "dataUri" });
+			}
+		}
+		const _templateLiteralChars = new Set(["$", "{", "}", "`", "\\", "<", ">", "/", ";"]);
+		if (ctx.context.includes("jsTemplateLiteral") && _templateLiteralChars.has(payload)) {
+			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
+				out.push({ char: payload, context: "jsTemplateLiteral" });
+			}
+		}
+		const _importMapChars = new Set(['"', "'", ",", "}", "]", ":", "\\"]);
+		if (ctx.context.includes("importMapString") && _importMapChars.has(payload)) {
+			if (this._markerInImportMap(marker, true)) {
+				out.push({ char: payload, context: "importMapString" });
+			}
+		}
+		if (ctx.context.includes("importMap") && _importMapChars.has(payload)) {
+			if (this._markerInImportMap(marker, false)) {
+				out.push({ char: payload, context: "importMap" });
+			}
+		}
 		const _jsChars = new Set(["<", ">", "/", ";", "'", '"', "`"]);
 		if (ctx.context.includes("jsInQuote") && _jsChars.has(payload)) {
 			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
@@ -784,7 +897,7 @@ const ResponseBodyPayloadGenerator = class {
 				out.push({ char: payload, context: "js" });
 			}
 		}
-		const _cssChars = new Set(["<", ">", "/", ";", "(", ")", ":"]);
+		const _cssChars = new Set(["<", ">", "/", ";", "(", ")", ":", "@"]);
 		if (ctx.context.includes("cssInQuote") && _cssChars.has(payload)) {
 			if (this._isPayloadInSpecifiedContext("style", marker, true)) {
 				out.push({ char: payload, context: "cssInQuote" });
@@ -889,6 +1002,27 @@ const ResponseBodyPayloadGenerator = class {
 			if (!raw) continue;
 			const isQuoted = raw.quote === '"' || raw.quote === "'";
 			if (quoted === isQuoted && raw.value.includes(marker)) return true;
+		}
+		return false;
+	}
+
+	private _markerInImportMap(marker: string, inquote: boolean): boolean {
+		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
+		for (const el of scripts) {
+			const type = (el.getAttribute?.("type") || "").toLowerCase();
+			if (type !== "importmap") continue;
+			const src: string = typeof el.rawText === "string"
+				? el.rawText
+				: (typeof el.text === "string" ? el.text : "");
+			if (!src) continue;
+			if (inquote) {
+				let pos = -1;
+				while ((pos = src.indexOf(marker, pos + 1)) !== -1) {
+					if (this._isInsideJsQuotedStringAt(src, pos)) return true;
+				}
+			} else {
+				if (src.includes(marker)) return true;
+			}
 		}
 		return false;
 	}
@@ -1098,6 +1232,58 @@ const ResponseBodyPayloadGenerator = class {
 		return false;
 	}
 
+	private static _RAWTEXT_ELEMENTS = new Set([
+		"TEXTAREA", "TITLE", "NOSCRIPT", "XMP", "IFRAME"
+	]);
+
+	private static _SVG_MATH_ELEMENTS = new Set(["SVG", "MATH"]);
+
+	private _findAncestorTag(node: any, tagSet: Set<string>): string | null {
+		let p: any = node;
+		while (p) {
+			if (p.rawTagName && tagSet.has(String(p.rawTagName).toUpperCase())) {
+				return String(p.rawTagName).toUpperCase();
+			}
+			p = p.parentNode;
+		}
+		return null;
+	}
+
+	private _addRawtextProbes(set: Set<string>, closingTag: string) {
+		set.add("<");
+		set.add(">");
+		set.add("/");
+		set.add(closingTag);
+	}
+
+	private _addSvgProbes(set: Set<string>) {
+		set.add("<");
+		set.add(">");
+		set.add("/");
+		set.add('"');
+		set.add("'");
+	}
+
+	private _addJsUriProbes(set: Set<string>, quote?: string) {
+		if (quote) set.add(quote);
+		set.add("(");
+		set.add(")");
+		set.add(";");
+		set.add("'");
+		set.add('"');
+		set.add("//");
+		set.add("\\");
+	}
+
+	private _addDataUriProbes(set: Set<string>, quote?: string) {
+		if (quote) set.add(quote);
+		set.add("/");
+		set.add(",");
+		set.add(";");
+		set.add("<");
+		set.add(">");
+	}
+
 	private _handleElementStructural(
 		node: any,
 		reflectedValue: string,
@@ -1134,7 +1320,19 @@ const ResponseBodyPayloadGenerator = class {
 			const quotes = this._getQuoteInfo(text, reflectedValue);
 			const quote = quotes[0] || "";
 			let ctx = "js";
-			if (quote) {
+			if (quote === "`") {
+				ctx = "jsTemplateLiteral";
+				payloadSet.add("`");
+				payloadSet.add("\\");
+				payloadSet.add("$");
+				payloadSet.add("{");
+				payloadSet.add("}");
+				for (const q of ["'", '"']) payloadSet.add(q);
+				payloadSet.add("<");
+				payloadSet.add(">");
+				payloadSet.add("/");
+				payloadSet.add(";");
+			} else if (quote) {
 				payloadSet.add(quote);
 				payloadSet.add("\\");
 				ctx = "jsInQuote";
@@ -1166,6 +1364,23 @@ const ResponseBodyPayloadGenerator = class {
 			return true;
 		}
 		const t = (typeAttr || "").toLowerCase();
+		if (t === "importmap") {
+			const quotes = this._getQuoteInfo(text, reflectedValue);
+			const quote = quotes[0] || '"';
+			contextSet.add(quotes.length ? "importMapString" : "importMap");
+			payloadSet.add(quote);
+			payloadSet.add("\\");
+			payloadSet.add(",");
+			payloadSet.add("}");
+			payloadSet.add("]");
+			payloadSet.add(":");
+			try {
+				sdk?.console?.log?.(
+					`[Reflector++][gen] SCRIPT hit: type="importmap" ctx=${quotes.length ? "importMapString" : "importMap"}`
+				);
+			} catch { }
+			return true;
+		}
 		if (/(?:application|text)\/(?:json|ld\+json)/.test(t)) {
 			const quotes = this._getQuoteInfo(text, reflectedValue);
 			const quote = quotes[0] || '"';
@@ -1209,6 +1424,7 @@ const ResponseBodyPayloadGenerator = class {
 			payloadSet.add(";");
 			payloadSet.add("(");
 			payloadSet.add(")");
+			payloadSet.add("@");
 		} else {
 			payloadSet.add("<");
 			payloadSet.add(">");
@@ -1218,6 +1434,7 @@ const ResponseBodyPayloadGenerator = class {
 			payloadSet.add(")");
 			payloadSet.add("\\");
 			payloadSet.add(":");
+			payloadSet.add("@");
 		}
 		contextSet.add(ctx);
 		return true;
@@ -1246,6 +1463,20 @@ const ResponseBodyPayloadGenerator = class {
 				if (this._hasAncestorTag(parent, "TEMPLATE")) {
 					contextSet.add("templateHtml");
 					this._addHtmlProbes(payloadSet);
+					return true;
+				}
+				if (ResponseBodyPayloadGenerator._RAWTEXT_ELEMENTS.has(tag)) {
+					const closingTag = `</${tag.toLowerCase()}>`;
+					contextSet.add("rawtextElement");
+					this._addRawtextProbes(payloadSet, closingTag);
+					return true;
+				}
+				const svgMathAncestor = this._findAncestorTag(
+					parent, ResponseBodyPayloadGenerator._SVG_MATH_ELEMENTS
+				);
+				if (svgMathAncestor) {
+					contextSet.add(svgMathAncestor === "SVG" ? "svgContext" : "mathContext");
+					this._addSvgProbes(payloadSet);
 					return true;
 				}
 				this._addHtmlProbes(payloadSet);
@@ -1324,7 +1555,20 @@ const ResponseBodyPayloadGenerator = class {
 				return;
 			}
 			if (this._urlAttrs.has(lower)) {
+				const attrVal = raw?.value ?? decoded;
+				const refIdx = attrVal.indexOf(reflectedValue);
+				const beforeRef = refIdx >= 0 ? attrVal.substring(0, refIdx) : "";
 				const quoted = raw?.quote === '"' || raw?.quote === "'";
+				if (/^\s*javascript\s*:/i.test(beforeRef)) {
+					contextSet.add("jsUri");
+					this._addJsUriProbes(payloadSet, quoted ? raw!.quote : undefined);
+					return;
+				}
+				if (/^\s*data\s*:/i.test(beforeRef)) {
+					contextSet.add("dataUri");
+					this._addDataUriProbes(payloadSet, quoted ? raw!.quote : undefined);
+					return;
+				}
 				if (quoted) {
 					contextSet.add("urlAttrInQuote");
 					this._addUrlProbes(payloadSet, true, raw!.quote);
@@ -1381,6 +1625,9 @@ const ResponseBodyPayloadGenerator = class {
 				payloadSet.add("&");
 				return;
 			}
+			if (lower === "id" || lower === "name") {
+				contextSet.add("domClobber");
+			}
 			if (!raw) {
 				contextSet.add("attributeEscaped");
 				return;
@@ -1413,6 +1660,21 @@ const ResponseBodyPayloadGenerator = class {
 		}
 	}
 
+	private _isEarlyReflection(reflectedValue: string): boolean {
+		const refIdx = this.body.indexOf(reflectedValue);
+		if (refIdx < 0) return false;
+		const before = this.body.substring(0, refIdx);
+		const relativeScriptRe = /<script[^>]+src\s*=\s*["'](?!(?:https?:)?\/\/|\/[^/])/i;
+		const relativeLinkRe = /<link[^>]+href\s*=\s*["'](?!(?:https?:)?\/\/|\/[^/])/i;
+		const relativeFormRe = /<form[^>]+action\s*=\s*["'](?!(?:https?:)?\/\/|\/[^/])/i;
+		const afterRef = this.body.substring(refIdx);
+		return (
+			relativeScriptRe.test(afterRef) ||
+			relativeLinkRe.test(afterRef) ||
+			relativeFormRe.test(afterRef)
+		) && !relativeScriptRe.test(before);
+	}
+
 	private _applyHtmlFallbackIfNeeded(
 		reflectedValue: string,
 		payloadSet: Set<string>,
@@ -1421,6 +1683,13 @@ const ResponseBodyPayloadGenerator = class {
 		const markers = this._variantsOf(reflectedValue);
 		if (contextSet.size === 0 && markers.some((m) => this._containsTextOutsideTags(m))) {
 			contextSet.add("html");
+			payloadSet.add("<");
+		}
+		if (
+			(contextSet.has("html") || contextSet.size === 0) &&
+			this._isEarlyReflection(reflectedValue)
+		) {
+			contextSet.add("htmlBaseInjection");
 			payloadSet.add("<");
 		}
 	}

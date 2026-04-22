@@ -259,4 +259,130 @@ describe("buildFindingTitle", () => {
   test("empty params list", () => {
     expect(buildFindingTitle([], false)).toBe("Encoded reflections (informational)");
   });
+
+  test("new context titles render correctly", () => {
+    const cases: Array<[string, string]> = [
+      ["rawtextElement", "RAWTEXT/RCDATA Element"],
+      ["jsUri", "JavaScript URI"],
+      ["svgContext", "SVG Context"],
+      ["jsTemplateLiteral", "JS Template Literal"],
+      ["htmlBaseInjection", "HTML (Base Tag Injection)"],
+      ["domClobber", "DOM Clobbering (id/name)"],
+      ["importMapString", "Import Map String"],
+      ["responseSplitting", "Response Splitting (CRLF)"],
+      ["dataUri", "Data URI"],
+    ];
+    for (const [ctx, label] of cases) {
+      const title = buildFindingTitle([{
+        name: "x", matches: [[0, 1]], context: ctx,
+        severity: "high", confirmed: true, source: "URL"
+      }], true);
+      expect(title).toContain(label);
+    }
+  });
+});
+
+describe("generateReport — new contexts", () => {
+  test("jsUri report shows JavaScript URI assessment", () => {
+    const param: any = {
+      name: "q", matches: [[0, 5]], context: "jsUri",
+      aggressive: ['(', ')'], source: "URL", value: "alert(1)",
+      severity: "critical", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("JavaScript URI");
+    expect(out).toContain("JavaScript URI injection");
+    expect(out).toContain("alert(1)//");
+  });
+
+  test("responseSplitting report shows CRLF assessment", () => {
+    const param: any = {
+      name: "redir", matches: [[0, 0]], context: "Response Splitting (CRLF)",
+      headers: ["Location"], aggressive: ['\r', '\n'], source: "URL",
+      severity: "critical", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("Response Splitting (CRLF)");
+    expect(out).toContain("CRLF injection");
+  });
+
+  test("jsTemplateLiteral with $ and { shows expression hole", () => {
+    const param: any = {
+      name: "t", matches: [[0, 1]], context: "jsTemplateLiteral",
+      aggressive: ['$', '{'], source: "URL", value: "x",
+      severity: "critical", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("expression hole");
+    expect(out).toContain("${alert(1)}");
+  });
+
+  test("importMapString shows import map assessment", () => {
+    const param: any = {
+      name: "mod", matches: [[0, 1]], context: "importMapString",
+      aggressive: ['"'], source: "URL", severity: "high", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("Import map injection");
+    expect(out).toContain("attacker.com/malicious.js");
+  });
+
+  test("dataUri shows data URI assessment", () => {
+    const param: any = {
+      name: "src", matches: [[0, 1]], context: "dataUri",
+      aggressive: ['<'], source: "URL", severity: "high", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("Data URI injection");
+    expect(out).toContain("data:text/html");
+  });
+
+  test("rawtextElement with closing tag shows escape payload", () => {
+    const param: any = {
+      name: "q", matches: [[0, 1]], context: "rawtextElement",
+      aggressive: ['</textarea>', '<'], source: "URL", severity: "medium", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("Element escape");
+    expect(out).toContain("</textarea><img");
+  });
+
+  test("svgContext with < shows SVG assessment", () => {
+    const param: any = {
+      name: "q", matches: [[0, 1]], context: "svgContext",
+      aggressive: ['<'], source: "URL", severity: "medium", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("SVG namespace");
+    expect(out).toContain("animate");
+  });
+
+  test("htmlBaseInjection with < shows base tag payload", () => {
+    const param: any = {
+      name: "q", matches: [[0, 1]], context: "htmlBaseInjection",
+      aggressive: ['<'], source: "URL", severity: "high", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("base");
+    expect(out).toContain("<base href=");
+  });
+
+  test("domClobber shows clobbering assessment", () => {
+    const param: any = {
+      name: "n", matches: [[0, 1]], context: "domClobber",
+      aggressive: [], source: "URL", severity: "medium", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("DOM clobbering");
+  });
+
+  test("CSS with @ shows @-rule assessment", () => {
+    const param: any = {
+      name: "c", matches: [[0, 1]], context: "css",
+      aggressive: ['@'], source: "URL", severity: "medium", confirmed: true
+    };
+    const out = generateReport(param);
+    expect(out).toContain("@-rule");
+    expect(out).toContain("@import");
+  });
 });

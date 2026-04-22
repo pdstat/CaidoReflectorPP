@@ -10,6 +10,10 @@ export class ConfigStore {
 
     private _checkResponseHeaderReflections = true;
 
+    private _checkRequestHeaderReflections = true;
+
+    private _checkPathSegmentReflections = true;
+
     private _noSniffContentTypes: Set<string> = new Set<string>();
 
     static getProbeOutOfScopeRequests(): boolean {
@@ -26,6 +30,22 @@ export class ConfigStore {
 
     static setCheckResponseHeaderReflections(value: boolean) {
         ConfigStore.instance._checkResponseHeaderReflections = value;
+    }
+
+    static getCheckRequestHeaderReflections(): boolean {
+        return ConfigStore.instance._checkRequestHeaderReflections;
+    }
+
+    static setCheckRequestHeaderReflections(value: boolean) {
+        ConfigStore.instance._checkRequestHeaderReflections = value;
+    }
+
+    static getCheckPathSegmentReflections(): boolean {
+        return ConfigStore.instance._checkPathSegmentReflections;
+    }
+
+    static setCheckPathSegmentReflections(value: boolean) {
+        ConfigStore.instance._checkPathSegmentReflections = value;
     }
 
     static getLogUnconfirmedFindings(): boolean {

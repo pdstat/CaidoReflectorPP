@@ -52,6 +52,28 @@ export const mutateParamValue = (
         form[param.key] = newValue;
         requestSpec.setBody(queryToString(form));
       }
+      return;
+    }
+    if (param.source === 'Header') {
+      const headerName = param.key.replace(/^header:/, '');
+      requestSpec.setHeader?.(headerName, newValue);
+      return;
+    }
+    if (param.source === 'Path') {
+      const parts = param.key.split(':');
+      const segIdx = parseInt(parts[1], 10);
+      const path = requestSpec.getPath?.() || '';
+      const segments = path.split('/');
+      let realIdx = 0;
+      for (let j = 0; j < segments.length; j++) {
+        if (segments[j] === '') continue;
+        if (realIdx === segIdx) {
+          segments[j] = encodeURIComponent(newValue);
+          break;
+        }
+        realIdx++;
+      }
+      requestSpec.setPath?.(segments.join('/'));
     }
   } catch (e) {
     sdk.console.log(`[Reflector++] mutateParamValue error: ${e}`);

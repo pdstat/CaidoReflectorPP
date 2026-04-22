@@ -109,5 +109,52 @@ describe('query utilities', () => {
       mutateParamValue(spec, param, 'NEWSESSION', sdk());
       expect(spec._cookie).toBe('sid=NEWSESSION; theme=light');
     });
+
+    test('updates request header value', () => {
+      const spec = {
+        _headers: { 'User-Agent': 'OriginalUA' } as Record<string, string>,
+        setHeader(name: string, v: string) { this._headers[name] = v; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '',
+        setQuery: (_: string) => {},
+        getBody: () => undefined,
+        setBody: (_: string) => {}
+      } as any;
+      const param: RequestParameter = { key: 'header:User-Agent', value: 'OriginalUA', source: 'Header', method: 'GET', code: 200 };
+      mutateParamValue(spec, param, 'ProbeValue123', sdk());
+      expect(spec._headers['User-Agent']).toBe('ProbeValue123');
+    });
+
+    test('updates URL path segment by index', () => {
+      const spec = {
+        _path: '/gym.php/originalvalue/detail',
+        getPath() { return this._path; },
+        setPath(p: string) { this._path = p; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '',
+        setQuery: (_: string) => {},
+        getBody: () => undefined,
+        setBody: (_: string) => {}
+      } as any;
+      const param: RequestParameter = { key: 'path:1:originalvalue', value: 'originalvalue', source: 'Path', method: 'GET', code: 200 };
+      mutateParamValue(spec, param, 'INJECTED', sdk());
+      expect(spec._path).toBe('/gym.php/INJECTED/detail');
+    });
+
+    test('path mutation encodes special characters', () => {
+      const spec = {
+        _path: '/page/target',
+        getPath() { return this._path; },
+        setPath(p: string) { this._path = p; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '',
+        setQuery: (_: string) => {},
+        getBody: () => undefined,
+        setBody: (_: string) => {}
+      } as any;
+      const param: RequestParameter = { key: 'path:1:target', value: 'target', source: 'Path', method: 'GET', code: 200 };
+      mutateParamValue(spec, param, 'a/b c', sdk());
+      expect(spec._path).toBe('/page/a%2Fb%20c');
+    });
   });
 });

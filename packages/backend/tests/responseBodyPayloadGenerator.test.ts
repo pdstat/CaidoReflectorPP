@@ -319,11 +319,14 @@ describe("PayloadGenerator.generate()", () => {
             expect(payload).toContain("\\");
         });
 
-        test("Template-literal string → jsInQuote + '`' + '\\\\' payloads", () => {
+        test("Template-literal string → jsTemplateLiteral + '`' + '$' + '{' payloads", () => {
             const { context, payload } = gen("<script>const s = `...REF...`;</script>");
-            expect(context).toContain("jsInQuote");
+            expect(context).toContain("jsTemplateLiteral");
             expect(payload).toContain("`");
             expect(payload).toContain("\\");
+            expect(payload).toContain("$");
+            expect(payload).toContain("{");
+            expect(payload).toContain("}");
         });
 
         test("Non-executable script type (JSON) → jsonInQuote", () => {
@@ -1036,5 +1039,190 @@ describe("detect() — raw body fallback for DOM-breaking chars", () => {
         // DOM-based detection may work for ) (doesn't break HTML quotes),
         // but if it fails, fallback should include cssUrl
         expect(ctxs.length).toBeGreaterThan(0);
+    });
+});
+
+describe("Feature 1: RAWTEXT/RCDATA element detection", () => {
+    test("textarea → rawtextElement context", () => {
+        const { context, payload } = gen(`<textarea>REF</textarea>`);
+        expect(context).toContain("rawtextElement");
+        expect(context).not.toContain("html");
+        expect(payload).toContain("</textarea>");
+        expect(payload).toContain("<");
+    });
+
+    test("title → rawtextElement context", () => {
+        const { context, payload } = gen(`<title>REF</title>`);
+        expect(context).toContain("rawtextElement");
+        expect(payload).toContain("</title>");
+    });
+
+    test("noscript → rawtextElement context", () => {
+        const { context } = gen(`<noscript>REF</noscript>`);
+        expect(context).toContain("rawtextElement");
+    });
+
+    test("xmp → rawtextElement context", () => {
+        const { context } = gen(`<xmp>REF</xmp>`);
+        expect(context).toContain("rawtextElement");
+    });
+
+    test("detect closing tag probe in rawtextElement", () => {
+        const h = `<textarea>PRE</textarea>SUF</textarea>`;
+        const res = det(h, ["rawtextElement"], "PRE", "</textarea>", "SUF");
+        expect(res.map(r => r.context)).toContain("rawtextElement");
+    });
+});
+
+describe("Feature 2: javascript: URI scheme detection", () => {
+    test("href=javascript: → jsUri context", () => {
+        const { context, payload } = gen(`<a href="javascript:REF">link</a>`);
+        expect(context).toContain("jsUri");
+        expect(context).not.toContain("urlAttrInQuote");
+        expect(payload).toContain("(");
+        expect(payload).toContain(")");
+    });
+
+    test("href=https: → urlAttrInQuote (not jsUri)", () => {
+        const { context } = gen(`<a href="https://example.com/REF">link</a>`);
+        expect(context).toContain("urlAttrInQuote");
+        expect(context).not.toContain("jsUri");
+    });
+
+    test("detect ( in jsUri context", () => {
+        const h = `<a href="javascript:PRE(SUF">x</a>`;
+        const res = det(h, ["jsUri"], "PRE", "(", "SUF");
+        expect(res.map(r => r.context)).toContain("jsUri");
+    });
+});
+
+describe("Feature 3: SVG/MathML namespace detection", () => {
+    test("text inside svg → svgContext", () => {
+        const { context, payload } = gen(`<svg><text>REF</text></svg>`);
+        expect(context).toContain("svgContext");
+        expect(context).not.toContain("html");
+        expect(payload).toContain("<");
+    });
+
+    test("text inside math → mathContext", () => {
+        const { context } = gen(`<math><mtext>REF</mtext></math>`);
+        expect(context).toContain("mathContext");
+    });
+
+    test("detect < in svgContext", () => {
+        const h = `<svg><text>PRE<SUF</text></svg>`;
+        const res = det(h, ["svgContext"], "PRE", "<", "SUF");
+        expect(res.map(r => r.context)).toContain("svgContext");
+    });
+});
+
+describe("Feature 4: JS template literal expression holes", () => {
+    test("backtick-quoted JS → jsTemplateLiteral + $ { } probes", () => {
+        const { context, payload } = gen("<script>var x = `Hello REF`;</script>");
+        expect(context).toContain("jsTemplateLiteral");
+        expect(payload).toContain("$");
+        expect(payload).toContain("{");
+        expect(payload).toContain("}");
+        expect(payload).toContain("`");
+    });
+
+    test("detect $ in jsTemplateLiteral", () => {
+        const h = `<script>var x = \`PRE\$SUF\`;</script>`;
+        const res = det(h, ["jsTemplateLiteral"], "PRE", "$", "SUF");
+        expect(res.map(r => r.context)).toContain("jsTemplateLiteral");
+    });
+});
+
+describe("Feature 5: base tag injection potential", () => {
+    test("early HTML reflection before relative script → htmlBaseInjection", () => {
+        const { context } = gen(`<div>REF</div><script src="app.js"></script>`);
+        expect(context).toContain("htmlBaseInjection");
+        expect(context).toContain("html");
+    });
+
+    test("HTML reflection with only absolute scripts → no htmlBaseInjection", () => {
+        const { context } = gen(`<div>REF</div><script src="https://cdn.example.com/app.js"></script>`);
+        expect(context).not.toContain("htmlBaseInjection");
+    });
+
+    test("HTML reflection before rooted-path form action → no htmlBaseInjection", () => {
+        const { context } = gen(`<h1>XSS REF</h1><form action="/brutelogic/gym.php" method="POST"></form>`);
+        expect(context).toContain("html");
+        expect(context).not.toContain("htmlBaseInjection");
+    });
+
+    test("HTML reflection before relative form action → htmlBaseInjection", () => {
+        const { context } = gen(`<h1>XSS REF</h1><form action="submit.php" method="POST"></form>`);
+        expect(context).toContain("htmlBaseInjection");
+    });
+});
+
+describe("Feature 6: DOM clobbering via id/name attributes", () => {
+    test("reflection in name attribute → domClobber", () => {
+        const { context } = gen(`<input name="REF">`);
+        expect(context).toContain("domClobber");
+    });
+
+    test("reflection in id attribute → domClobber", () => {
+        const { context } = gen(`<div id="REF">x</div>`);
+        expect(context).toContain("domClobber");
+    });
+
+    test("reflection in class attribute → no domClobber", () => {
+        const { context } = gen(`<div class="REF">x</div>`);
+        expect(context).not.toContain("domClobber");
+    });
+});
+
+describe("Feature 8: Import map detection", () => {
+    test("importmap script block string → importMapString", () => {
+        const { context, payload } = gen(`<script type="importmap">{"imports":{"lodash":"REF"}}</script>`);
+        expect(context).toContain("importMapString");
+        expect(payload).toContain('"');
+        expect(payload).toContain("\\");
+    });
+
+    test("importmap structure → importMap", () => {
+        const { context } = gen(`<script type="importmap">{REF}</script>`);
+        expect(context).toContain("importMap");
+    });
+
+    test("detect , in importMapString", () => {
+        const h = `<script type="importmap">{"imports":{"x":"PRE,SUF"}}</script>`;
+        const res = det(h, ["importMapString"], "PRE", ",", "SUF");
+        expect(res.map(r => r.context)).toContain("importMapString");
+    });
+});
+
+describe("Feature 9: data: URI scheme detection", () => {
+    test("src=data: → dataUri context", () => {
+        const { context, payload } = gen(`<iframe src="data:text/html,REF"></iframe>`);
+        expect(context).toContain("dataUri");
+        expect(context).not.toContain("urlAttrInQuote");
+        expect(payload).toContain("<");
+        expect(payload).toContain(">");
+    });
+
+    test("src=https: → urlAttrInQuote (not dataUri)", () => {
+        const { context } = gen(`<iframe src="https://example.com/REF"></iframe>`);
+        expect(context).not.toContain("dataUri");
+    });
+});
+
+describe("Feature 10: CSS exploitation primitives", () => {
+    test("CSS unquoted probes include @", () => {
+        const { payload } = gen(`<style>body{color:REF}</style>`);
+        expect(payload).toContain("@");
+    });
+
+    test("CSS quoted probes include @", () => {
+        const { payload } = gen(`<style>body{font:"REF"}</style>`);
+        expect(payload).toContain("@");
+    });
+
+    test("detect @ in css context", () => {
+        const h = `<style>PRE@SUF</style>`;
+        const res = det(h, ["css"], "PRE", "@", "SUF");
+        expect(res.map(r => r.context)).toContain("css");
     });
 });

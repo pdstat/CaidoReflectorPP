@@ -78,17 +78,18 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
     const { confirmed: confirmedHeaders, allowedChars, crlf } = await confirmHeaderReflection(request, param, potential, sdk);
     if (confirmedHeaders.length > 0) {
       const syntheticMatches: Array<[number, number]> = confirmedHeaders.map((_, i) => [i, i]);
+      const contextLabel = crlf ? "Response Splitting (CRLF)" : "Response Header";
       const severity = classifySeverity({
         confirmed: true,
         allowedChars,
-        context: "Response Header",
-        header: true,
+        context: contextLabel,
+        header: !crlf,
         headerNames: confirmedHeaders
       });
       confirmed.push({
         name: param.key,
         matches: syntheticMatches,
-        context: "Response Header",
+        context: contextLabel,
         source: param.source,
         headers: confirmedHeaders,
         aggressive: allowedChars.length ? allowedChars : undefined,

@@ -8,18 +8,28 @@ const makeSpec = (opts: Partial<{
   body: string;
   contentType: string;
   https: boolean;
+  headers: Record<string, string[]>;
+  path: string;
 }> = {}) => ({
   getQuery: () => opts.query,
   getMethod: () => opts.method || (opts.body ? 'POST' : 'GET'),
   getHeader: (name: string) => {
     if (name === 'Cookie' && opts.cookies) return [opts.cookies];
     if (name === 'Content-Type' && opts.contentType) return [opts.contentType];
+    if (opts.headers) return opts.headers[name];
     return undefined;
+  },
+  getHeaders: () => {
+    const h: Record<string, string[]> = {};
+    if (opts.cookies) h['Cookie'] = [opts.cookies];
+    if (opts.contentType) h['Content-Type'] = [opts.contentType];
+    if (opts.headers) Object.assign(h, opts.headers);
+    return h;
   },
   getBody: () => (opts.body ? { toText: () => opts.body } : undefined),
   getTls: () => !!opts.https,
   getHost: () => 'example.com',
-  getPath: () => '/a'
+  getPath: () => opts.path ?? '/a'
 });
 
 // Minimal SDK mock capturing console logs
@@ -93,7 +103,7 @@ describe('enumerateRequestParameters', () => {
 
   test('empty spec yields log and empty array', () => {
     const sdk = makeSdk();
-    const spec: any = { getQuery: () => '', getMethod: () => 'GET', getHeader: () => undefined, getBody: () => undefined, getTls: () => false, getHost: () => 'example.com', getPath: () => '/empty' };
+    const spec: any = { getQuery: () => '', getMethod: () => 'GET', getHeader: () => undefined, getBody: () => undefined, getTls: () => false, getHost: () => 'example.com', getPath: () => '/a' };
     const out = enumerateRequestParameters(spec, sdk, 200, true);
     expect(out).toHaveLength(0);
     expect(sdk.console.log).toHaveBeenCalledWith('[Reflector++] No (new) parameters found');
@@ -111,5 +121,75 @@ describe('enumerateRequestParameters', () => {
     const spec = makeSpec({ cookies: '  token =abc ; x=1' });
     const out = enumerateRequestParameters(spec, sdk, 200, true);
     expect(out.find(p => p.key === 'token')?.value).toBe('abc');
+  });
+
+  test('enumerates request header values as Header source', () => {
+    const sdk = makeSdk();
+    const spec = uniqueSpec({
+      headers: {
+        'User-Agent': ['Mozilla/5.0 TestBrowser'],
+        'Referer': ['https://example.com/page'],
+        'X-Custom-Debug': ['my-debug-value-12345']
+      }
+    });
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const headerParams = out.filter(p => p.source === 'Header');
+    expect(headerParams.length).toBe(3);
+    expect(headerParams.find(p => p.key === 'header:User-Agent')?.value).toBe('Mozilla/5.0 TestBrowser');
+    expect(headerParams.find(p => p.key === 'header:Referer')?.value).toBe('https://example.com/page');
+    expect(headerParams.find(p => p.key === 'header:X-Custom-Debug')?.value).toBe('my-debug-value-12345');
+  });
+
+  test('skips short header values and skip-listed headers', () => {
+    const sdk = makeSdk();
+    const spec = uniqueSpec({
+      headers: {
+        'Host': ['example.com'],
+        'Authorization': ['Bearer secret'],
+        'X-Short': ['abc'],
+        'X-Good': ['long-enough-value']
+      }
+    });
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const headerParams = out.filter(p => p.source === 'Header');
+    expect(headerParams.length).toBe(1);
+    expect(headerParams[0].key).toBe('header:X-Good');
+  });
+
+  test('enumerates URL path segments as Path source', () => {
+    const sdk = makeSdk();
+    const spec = uniqueSpec({ path: '/api/myvalue123' });
+    (spec as any).getPath = () => '/api/myvalue123';
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const pathParams = out.filter(p => p.source === 'Path');
+    // "api" is in COMMON_PATH_SEGMENTS, only "myvalue123" passes
+    expect(pathParams.length).toBe(1);
+    expect(pathParams[0].key).toBe('path:1:myvalue123');
+    expect(pathParams[0].value).toBe('myvalue123');
+  });
+
+  test('skips short and common path segments', () => {
+    const sdk = makeSdk();
+    const spec = uniqueSpec({ path: '/api/users/12345/profile-data' });
+    (spec as any).getPath = () => '/api/users/12345/profile-data';
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const pathParams = out.filter(p => p.source === 'Path');
+    // "api" is common, "users" is common, "12345" is numeric, "profile-data" passes
+    expect(pathParams.length).toBe(1);
+    expect(pathParams[0].value).toBe('profile-data');
+  });
+
+  test('path segment key encodes segment index for mutation', () => {
+    const sdk = makeSdk();
+    const spec = uniqueSpec();
+    (spec as any).getPath = () => '/section/myvalue/detail';
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const pathParams = out.filter(p => p.source === 'Path');
+    const myvalue = pathParams.find(p => p.value === 'myvalue');
+    expect(myvalue).toBeDefined();
+    expect(myvalue!.key).toBe('path:1:myvalue');
+    const detail = pathParams.find(p => p.value === 'detail');
+    expect(detail).toBeDefined();
+    expect(detail!.key).toBe('path:2:detail');
   });
 });

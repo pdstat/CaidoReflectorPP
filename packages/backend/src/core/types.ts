@@ -1,4 +1,4 @@
-export type ParamSource = "URL" | "Cookie" | "Body";
+export type ParamSource = "URL" | "Cookie" | "Body" | "Header" | "Path";
 
 export type SeverityTier = 'critical' | 'high' | 'medium' | 'low' | 'info';
 

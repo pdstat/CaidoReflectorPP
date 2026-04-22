@@ -2,19 +2,27 @@
 // This reduces duplication across scoring, reporting, and detection layers.
 
 export type CanonicalContext =
-  | 'js' | 'jsInQuote'
+  | 'js' | 'jsInQuote' | 'jsTemplateLiteral'
+  | 'jsUri' | 'dataUri'
   | 'css' | 'cssInQuote'
   | 'jsonString' | 'jsonStructure'
   | 'eventHandler' | 'eventHandlerEscaped'
   | 'attribute' | 'attributeInQuote' | 'attributeEscaped'
-  | 'html' | 'htmlComment'
+  | 'html' | 'htmlComment' | 'htmlBaseInjection'
+  | 'rawtextElement'
+  | 'svgContext' | 'mathContext'
+  | 'domClobber'
+  | 'importMap' | 'importMapString'
   | 'jsonEscaped'
-  | 'responseHeader';
+  | 'responseHeader' | 'responseSplitting';
 
 // Centralized constant references to avoid string literal drift across modules.
 export const CONTEXT = Object.freeze({
   JS: 'js' as CanonicalContext,
   JS_IN_QUOTE: 'jsInQuote' as CanonicalContext,
+  JS_TEMPLATE_LITERAL: 'jsTemplateLiteral' as CanonicalContext,
+  JS_URI: 'jsUri' as CanonicalContext,
+  DATA_URI: 'dataUri' as CanonicalContext,
   CSS: 'css' as CanonicalContext,
   CSS_IN_QUOTE: 'cssInQuote' as CanonicalContext,
   EVENT_HANDLER: 'eventHandler' as CanonicalContext,
@@ -24,10 +32,18 @@ export const CONTEXT = Object.freeze({
   ATTRIBUTE_ESCAPED: 'attributeEscaped' as CanonicalContext,
   HTML: 'html' as CanonicalContext,
   HTML_COMMENT: 'htmlComment' as CanonicalContext,
+  HTML_BASE_INJECTION: 'htmlBaseInjection' as CanonicalContext,
+  RAWTEXT_ELEMENT: 'rawtextElement' as CanonicalContext,
+  SVG_CONTEXT: 'svgContext' as CanonicalContext,
+  MATH_CONTEXT: 'mathContext' as CanonicalContext,
+  DOM_CLOBBER: 'domClobber' as CanonicalContext,
+  IMPORT_MAP: 'importMap' as CanonicalContext,
+  IMPORT_MAP_STRING: 'importMapString' as CanonicalContext,
   JSON_STRING: 'jsonString' as CanonicalContext,
   JSON_STRUCTURE: 'jsonStructure' as CanonicalContext,
   JSON_ESCAPED: 'jsonEscaped' as CanonicalContext,
   RESPONSE_HEADER: 'responseHeader' as CanonicalContext,
+  RESPONSE_SPLITTING: 'responseSplitting' as CanonicalContext,
 });
 
 // Alias (input) -> canonical context mapping.
@@ -68,6 +84,30 @@ const ALIASES: Record<string, CanonicalContext> = {
   'json string': 'jsonString',
   'json structure': 'jsonStructure',
 
+  // New context aliases
+  'rawtext element': 'rawtextElement',
+  'rawtext/rcdata element': 'rawtextElement',
+  'javascript uri': 'jsUri',
+  'javascript: uri': 'jsUri',
+  'data uri': 'dataUri',
+  'data: uri': 'dataUri',
+  'svg context': 'svgContext',
+  'svg': 'svgContext',
+  'math context': 'mathContext',
+  'mathml context': 'mathContext',
+  'math': 'mathContext',
+  'js template literal': 'jsTemplateLiteral',
+  'template literal': 'jsTemplateLiteral',
+  'html base injection': 'htmlBaseInjection',
+  'html (base tag injection)': 'htmlBaseInjection',
+  'base injection': 'htmlBaseInjection',
+  'dom clobbering': 'domClobber',
+  'dom clobbering (id/name)': 'domClobber',
+  'import map': 'importMap',
+  'import map string': 'importMapString',
+  'response splitting': 'responseSplitting',
+  'response splitting (crlf)': 'responseSplitting',
+
   // Internal names from payload generator (appear in otherContexts)
   'eventhandlerattrinquote': 'eventHandler',
   'eventhandlerattr': 'eventHandler',
@@ -84,13 +124,28 @@ const ALIASES: Record<string, CanonicalContext> = {
   'templatehtml': 'html',
   'jsoninquote': 'jsonString',
   'json': 'jsonStructure',
+  'rawtextelement': 'rawtextElement',
+  'jsuri': 'jsUri',
+  'datauri': 'dataUri',
+  'jstemplateliteral': 'jsTemplateLiteral',
+  'svgcontext': 'svgContext',
+  'mathcontext': 'mathContext',
+  'htmlbaseinjection': 'htmlBaseInjection',
+  'domclobber': 'domClobber',
+  'importmap': 'importMap',
+  'importmapstring': 'importMapString',
+  'responsesplitting': 'responseSplitting',
 };
 
 // Accept set for direct canonical names (lowercase form)
 const CANONICAL_SET = new Set<CanonicalContext>([
-  'js','jsInQuote','css','cssInQuote','eventHandler',
+  'js','jsInQuote','jsTemplateLiteral','jsUri','dataUri',
+  'css','cssInQuote','eventHandler',
   'eventHandlerEscaped','attribute','attributeInQuote',
-  'attributeEscaped','html','htmlComment','jsonEscaped','responseHeader',
+  'attributeEscaped','html','htmlComment','htmlBaseInjection',
+  'rawtextElement','svgContext','mathContext','domClobber',
+  'importMap','importMapString',
+  'jsonEscaped','responseHeader','responseSplitting',
   'jsonString','jsonStructure'
 ]);
 
@@ -122,6 +177,9 @@ export function prettyPrintContext(raw?: string): string | undefined {
   switch (canonical) {
     case 'js': return 'Script';
     case 'jsInQuote': return 'Script String';
+    case 'jsTemplateLiteral': return 'JS Template Literal';
+    case 'jsUri': return 'JavaScript URI';
+    case 'dataUri': return 'Data URI';
     case 'css': return 'Style';
     case 'cssInQuote': return 'Style String';
     case 'eventHandler': return 'Event Handler Attribute';
@@ -134,7 +192,15 @@ export function prettyPrintContext(raw?: string): string | undefined {
     case 'jsonStructure': return 'JSON Structure';
     case 'html': return 'HTML';
     case 'htmlComment': return 'HTML Comment';
+    case 'htmlBaseInjection': return 'HTML (Base Tag Injection)';
+    case 'rawtextElement': return 'RAWTEXT/RCDATA Element';
+    case 'svgContext': return 'SVG Context';
+    case 'mathContext': return 'MathML Context';
+    case 'domClobber': return 'DOM Clobbering (id/name)';
+    case 'importMap': return 'Import Map';
+    case 'importMapString': return 'Import Map String';
     case 'responseHeader': return 'Response Header';
+    case 'responseSplitting': return 'Response Splitting (CRLF)';
     default: return canonical;
   }
 }

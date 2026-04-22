@@ -192,4 +192,127 @@ describe("classifySeverity", () => {
       confirmed: true, allowedChars: [], context: 'unknownCtx'
     })).toBe('low');
   });
+
+  // Feature 1: RAWTEXT/RCDATA
+  test("confirmed rawtextElement with closing tag + < is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['</textarea>', '<'], context: 'rawtextElement'
+    })).toBe('medium');
+  });
+
+  test("confirmed rawtextElement without closing tag is low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['>'], context: 'rawtextElement'
+    })).toBe('low');
+  });
+
+  // Feature 2: javascript: URI
+  test("confirmed jsUri is always critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [], context: 'jsUri'
+    })).toBe('critical');
+  });
+
+  test("confirmed jsUri with chars is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['(', ')'], context: 'jsUri'
+    })).toBe('critical');
+  });
+
+  // Feature 3: SVG/MathML
+  test("confirmed svgContext with < is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<'], context: 'svgContext'
+    })).toBe('medium');
+  });
+
+  test("confirmed mathContext with < is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<'], context: 'mathContext'
+    })).toBe('medium');
+  });
+
+  test("confirmed svgContext without < is low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['>'], context: 'svgContext'
+    })).toBe('low');
+  });
+
+  // Feature 4: JS template literals
+  test("confirmed jsTemplateLiteral with $ and { is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['$', '{'], context: 'jsTemplateLiteral'
+    })).toBe('critical');
+  });
+
+  test("confirmed jsTemplateLiteral with backtick is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['`'], context: 'jsTemplateLiteral'
+    })).toBe('critical');
+  });
+
+  test("confirmed jsTemplateLiteral without breakout is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['>'], context: 'jsTemplateLiteral'
+    })).toBe('high');
+  });
+
+  // Feature 5: base tag injection
+  test("confirmed htmlBaseInjection with < is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<'], context: 'htmlBaseInjection'
+    })).toBe('high');
+  });
+
+  test("pretty-printed HTML (Base Tag Injection) with < resolves to high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<'], context: 'HTML (Base Tag Injection)'
+    })).toBe('high');
+  });
+
+  test("confirmed htmlBaseInjection without < is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['>'], context: 'htmlBaseInjection'
+    })).toBe('medium');
+  });
+
+  // Feature 6: DOM clobbering
+  test("confirmed domClobber is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [], context: 'domClobber'
+    })).toBe('medium');
+  });
+
+  // Feature 7: CRLF response splitting
+  test("confirmed responseSplitting is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['\r', '\n'], context: 'responseSplitting'
+    })).toBe('critical');
+  });
+
+  // Feature 8: import maps
+  test("confirmed importMap is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [], context: 'importMap'
+    })).toBe('high');
+  });
+
+  test("confirmed importMapString is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"'], context: 'importMapString'
+    })).toBe('high');
+  });
+
+  // Feature 9: data: URI
+  test("confirmed dataUri with chars is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<', '>'], context: 'dataUri'
+    })).toBe('high');
+  });
+
+  test("confirmed dataUri without chars is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [], context: 'dataUri'
+    })).toBe('medium');
+  });
 });

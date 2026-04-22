@@ -52,6 +52,38 @@ describe("contextMap.toCanonical", () => {
     expect(toCanonical(input)).toBe(expected);
   });
 
+  const newContextCases: Array<[string, string]> = [
+    ["rawtextElement", "rawtextElement"],
+    ["RAWTEXT/RCDATA Element", "rawtextElement"],
+    ["jsUri", "jsUri"],
+    ["JavaScript URI", "jsUri"],
+    ["javascript: uri", "jsUri"],
+    ["dataUri", "dataUri"],
+    ["Data URI", "dataUri"],
+    ["data: uri", "dataUri"],
+    ["svgContext", "svgContext"],
+    ["SVG Context", "svgContext"],
+    ["mathContext", "mathContext"],
+    ["MathML Context", "mathContext"],
+    ["jsTemplateLiteral", "jsTemplateLiteral"],
+    ["JS Template Literal", "jsTemplateLiteral"],
+    ["template literal", "jsTemplateLiteral"],
+    ["htmlBaseInjection", "htmlBaseInjection"],
+    ["HTML (Base Tag Injection)", "htmlBaseInjection"],
+    ["base injection", "htmlBaseInjection"],
+    ["domClobber", "domClobber"],
+    ["DOM Clobbering (id/name)", "domClobber"],
+    ["importMap", "importMap"],
+    ["Import Map", "importMap"],
+    ["importMapString", "importMapString"],
+    ["Import Map String", "importMapString"],
+    ["responseSplitting", "responseSplitting"],
+    ["Response Splitting (CRLF)", "responseSplitting"],
+  ];
+  test.each(newContextCases)("new context: %s → %s", (input, expected) => {
+    expect(toCanonical(input)).toBe(expected);
+  });
+
   const internalCases: Array<[string, string]> = [
     ["eventHandlerAttrInQuote", "eventHandler"],
     ["eventHandlerAttr", "eventHandler"],
@@ -97,6 +129,9 @@ describe("contextMap.prettyPrintContext", () => {
   const prettyPairs: Array<[string, string]> = [
     ["js", "Script"],
     ["jsInQuote", "Script String"],
+    ["jsTemplateLiteral", "JS Template Literal"],
+    ["jsUri", "JavaScript URI"],
+    ["dataUri", "Data URI"],
     ["css", "Style"],
     ["cssInQuote", "Style String"],
     ["eventHandler", "Event Handler Attribute"],
@@ -107,9 +142,17 @@ describe("contextMap.prettyPrintContext", () => {
     ["jsonEscaped", "Script (JSON block, \\uXXXX)"],
     ["html", "HTML"],
     ["htmlcomment", "HTML Comment"],
+    ["htmlBaseInjection", "HTML (Base Tag Injection)"],
+    ["rawtextElement", "RAWTEXT/RCDATA Element"],
+    ["svgContext", "SVG Context"],
+    ["mathContext", "MathML Context"],
+    ["domClobber", "DOM Clobbering (id/name)"],
+    ["importMap", "Import Map"],
+    ["importMapString", "Import Map String"],
     ["jsonString", "JSON String"],
     ["jsonStructure", "JSON Structure"],
     ["responseHeader", "Response Header"],
+    ["responseSplitting", "Response Splitting (CRLF)"],
   ];
   test.each(prettyPairs)("%s → %s", (raw, expected) => {
     expect(prettyPrintContext(raw)).toBe(expected);
