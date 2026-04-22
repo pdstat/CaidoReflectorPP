@@ -259,14 +259,6 @@ const ResponseBodyPayloadGenerator = class {
 		this._detectLessThanPayload(context, prefix, payload, suffix, res);
 		this._detectBackslashOrEmpty(context, prefix, payload, suffix, res);
 		this._detectSpecializedPayload(context, prefix, payload, suffix, res);
-		if (res.length === 0 && context.context.length > 0) {
-			const marker = prefix + payload + suffix;
-			if (this.body.includes(marker)) {
-				for (const ctx of context.context) {
-					res.push({ char: payload, context: ctx });
-				}
-			}
-		}
 		return res;
 	}
 
@@ -299,6 +291,12 @@ const ResponseBodyPayloadGenerator = class {
 				const decoded = attrs[name];
 				if (typeof decoded === "string" && decoded.includes(marker))
 					out.push({ char: payload, context: "attributeEscaped" });
+			}
+		}
+		if (!found) {
+			const marker = prefix + payload + suffix;
+			if (this.body.includes(marker)) {
+				out.push({ char: payload, context: "attributeInQuote" });
 			}
 		}
 	}

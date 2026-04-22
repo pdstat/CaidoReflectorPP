@@ -144,13 +144,10 @@ s.prop1   = "saveandretrieve:hello:quote";
             expect(res.map((r: any) => r.char)).toContain("'");
         });
 
-        test("Non-executable script type: JS detector skips, body fallback confirms", () => {
+        test("Non-executable script type: JS detector correctly skips", () => {
             const html = `<script type="application/json">{"k":"PRE'SUF"}</script>`;
-            // JS-specific detector skips non-executable scripts, but body
-            // fallback confirms since the marker is literally reflected.
             const res = det(html, ["jsInQuote"], "PRE", "'", "SUF");
-            expect(res).toHaveLength(1);
-            expect(res[0].context).toBe("jsInQuote");
+            expect(res).toHaveLength(0);
         });
     });
 
