@@ -13,16 +13,28 @@ describe("classifySeverity", () => {
     })).toBe('critical');
   });
 
-  test("confirmed script string with < is critical", () => {
+  test("confirmed script string with < and / is critical", () => {
     expect(classifySeverity({
-      confirmed: true, allowedChars: ['<'], context: 'jsInQuote'
+      confirmed: true, allowedChars: ['<', '/'], context: 'jsInQuote'
     })).toBe('critical');
   });
 
-  test("confirmed script (non-string) with < is critical", () => {
+  test("confirmed script string with < alone is high (no / for </script>)", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<'], context: 'jsInQuote'
+    })).toBe('high');
+  });
+
+  test("confirmed script (non-string) with < and / is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<', '/'], context: 'js'
+    })).toBe('critical');
+  });
+
+  test("confirmed script (non-string) with < alone is high", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['<'], context: 'js'
-    })).toBe('critical');
+    })).toBe('high');
   });
 
   test("confirmed event handler with any char is critical", () => {
@@ -243,7 +255,7 @@ describe("classifySeverity", () => {
 
   test("legacy alias 'Script' maps to js context", () => {
     expect(classifySeverity({
-      confirmed: true, allowedChars: ['<'], context: 'Script'
+      confirmed: true, allowedChars: ['<', '/'], context: 'Script'
     })).toBe('critical');
   });
 
@@ -315,6 +327,18 @@ describe("classifySeverity", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['`'], context: 'jsTemplateLiteral'
     })).toBe('critical');
+  });
+
+  test("confirmed jsTemplateLiteral with < and / is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<', '/'], context: 'jsTemplateLiteral'
+    })).toBe('critical');
+  });
+
+  test("confirmed jsTemplateLiteral with < alone is low (no / for </script>)", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<'], context: 'jsTemplateLiteral'
+    })).toBe('low');
   });
 
   test("confirmed jsTemplateLiteral with backslash is high", () => {

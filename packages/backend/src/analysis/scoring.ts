@@ -46,6 +46,10 @@ function hasTagEscape(chars: string[]): boolean {
   return chars.includes('<');
 }
 
+function hasScriptTagEscape(chars: string[]): boolean {
+  return chars.includes('<') && chars.includes('/');
+}
+
 function hasClosingTagBreakout(chars: string[]): boolean {
   return chars.some(c => /^<\/[a-z]+>$/i.test(c));
 }
@@ -64,16 +68,18 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   if (canonical === CONTEXT.RESPONSE_SPLITTING) return 'critical';
   if (canonical === CONTEXT.JS_URI) return 'critical';
   if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) {
-    if (hasExpressionHole(chars) || chars.includes('`') || hasTagEscape(chars)) {
+    if (hasExpressionHole(chars) || chars.includes('`')
+        || hasScriptTagEscape(chars)) {
       return 'critical';
     }
   }
   if (SCRIPT_CONTEXTS.has(canonical)) {
     const isString = canonical === CONTEXT.JS_IN_QUOTE;
-    if (isString && (hasQuoteBreakout(chars) || hasTagEscape(chars))) {
+    if (isString && (hasQuoteBreakout(chars)
+        || hasScriptTagEscape(chars))) {
       return 'critical';
     }
-    if (!isString && hasTagEscape(chars)) return 'critical';
+    if (!isString && hasScriptTagEscape(chars)) return 'critical';
   }
   if (canonical === CONTEXT.EVENT_HANDLER && chars.length > 0) {
     return 'critical';
