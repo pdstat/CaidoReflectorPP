@@ -27,6 +27,13 @@ function hasQuoteBreakout(chars: string[]): boolean {
   return chars.includes('"') || chars.includes("'");
 }
 
+function hasStringEscape(chars: string[]): boolean {
+  return hasQuoteBreakout(chars)
+    || chars.includes('`')
+    || chars.includes('\\')
+    || hasTagEscape(chars);
+}
+
 function hasTagEscape(chars: string[]): boolean {
   return chars.includes('<');
 }
@@ -66,7 +73,11 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
 
   // High tier
   if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) return 'high';
-  if (SCRIPT_CONTEXTS.has(canonical)) return 'high';
+  if (canonical === CONTEXT.JS_IN_QUOTE) {
+    if (hasStringEscape(chars)) return 'high';
+    return 'low';
+  }
+  if (canonical === CONTEXT.JS) return 'high';
   if (canonical === CONTEXT.EVENT_HANDLER) return 'high';
   if (canonical === CONTEXT.ATTRIBUTE_IN_QUOTE && hasQuoteBreakout(chars)) {
     return 'high';
