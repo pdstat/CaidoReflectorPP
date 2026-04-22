@@ -11,10 +11,6 @@ export interface SeverityInputs {
   headerNames?: string[];
 }
 
-const HIGH_IMPACT_HEADERS = new Set([
-  'location', 'refresh', 'set-cookie', 'content-security-policy'
-]);
-
 const SCRIPT_CONTEXTS = new Set<string>([
   CONTEXT.JS, CONTEXT.JS_IN_QUOTE
 ]);
@@ -32,6 +28,18 @@ function hasStringEscape(chars: string[]): boolean {
     || chars.includes('`')
     || chars.includes('\\')
     || hasTagEscape(chars);
+}
+
+function hasRedirectChars(chars: string[]): boolean {
+  return chars.includes('/') || chars.includes(':');
+}
+
+function hasCookieInjectionChars(chars: string[]): boolean {
+  return chars.includes(';');
+}
+
+function hasCSPBypassChars(chars: string[]): boolean {
+  return chars.includes(';') || chars.includes("'") || chars.includes('*');
 }
 
 function hasTagEscape(chars: string[]): boolean {
@@ -72,7 +80,10 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   }
 
   // High tier
-  if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) return 'high';
+  if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) {
+    if (chars.includes('\\')) return 'high';
+    return 'low';
+  }
   if (canonical === CONTEXT.JS_IN_QUOTE) {
     if (hasStringEscape(chars)) return 'high';
     return 'low';
@@ -90,10 +101,15 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
     return 'high';
   }
   if (inp.header) {
-    const hasHighImpact = inp.headerNames?.some(
-      h => HIGH_IMPACT_HEADERS.has(h.toLowerCase())
+    const names = new Set(
+      inp.headerNames?.map(h => h.toLowerCase()) ?? []
     );
-    if (hasHighImpact) return 'high';
+    if ((names.has('location') || names.has('refresh'))
+        && hasRedirectChars(chars)) return 'high';
+    if (names.has('set-cookie')
+        && hasCookieInjectionChars(chars)) return 'high';
+    if (names.has('content-security-policy')
+        && hasCSPBypassChars(chars)) return 'high';
   }
 
   // Medium tier

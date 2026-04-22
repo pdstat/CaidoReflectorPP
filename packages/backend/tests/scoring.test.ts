@@ -73,36 +73,84 @@ describe("classifySeverity", () => {
     })).toBe('high');
   });
 
-  test("confirmed Location header is high", () => {
+  test("Location header with redirect chars is high", () => {
     expect(classifySeverity({
-      confirmed: true, allowedChars: [],
+      confirmed: true, allowedChars: ['/'],
       context: 'Response Header', header: true,
       headerNames: ['Location']
     })).toBe('high');
   });
 
-  test("confirmed Set-Cookie header is high", () => {
+  test("Location header with : is high", () => {
     expect(classifySeverity({
-      confirmed: true, allowedChars: [],
+      confirmed: true, allowedChars: [':'],
+      context: 'Response Header', header: true,
+      headerNames: ['Location']
+    })).toBe('high');
+  });
+
+  test("Location header without redirect chars is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ["'"],
+      context: 'Response Header', header: true,
+      headerNames: ['Location']
+    })).toBe('medium');
+  });
+
+  test("Set-Cookie header with ; is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [';'],
       context: 'Response Header', header: true,
       headerNames: ['Set-Cookie']
     })).toBe('high');
   });
 
-  test("confirmed CSP header is high", () => {
+  test("Set-Cookie header without ; is medium", () => {
     expect(classifySeverity({
-      confirmed: true, allowedChars: [],
+      confirmed: true, allowedChars: ['='],
+      context: 'Response Header', header: true,
+      headerNames: ['Set-Cookie']
+    })).toBe('medium');
+  });
+
+  test("CSP header with ' is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ["'"],
       context: 'Response Header', header: true,
       headerNames: ['Content-Security-Policy']
     })).toBe('high');
   });
 
-  test("confirmed Refresh header is high", () => {
+  test("CSP header with * is high", () => {
     expect(classifySeverity({
-      confirmed: true, allowedChars: [],
+      confirmed: true, allowedChars: ['*'],
+      context: 'Response Header', header: true,
+      headerNames: ['Content-Security-Policy']
+    })).toBe('high');
+  });
+
+  test("CSP header without bypass chars is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [':'],
+      context: 'Response Header', header: true,
+      headerNames: ['Content-Security-Policy']
+    })).toBe('medium');
+  });
+
+  test("Refresh header with / is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['/'],
       context: 'Response Header', header: true,
       headerNames: ['Refresh']
     })).toBe('high');
+  });
+
+  test("Refresh header without redirect chars is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['='],
+      context: 'Response Header', header: true,
+      headerNames: ['Refresh']
+    })).toBe('medium');
   });
 
   test("confirmed HTML with < is medium", () => {
@@ -269,10 +317,16 @@ describe("classifySeverity", () => {
     })).toBe('critical');
   });
 
-  test("confirmed jsTemplateLiteral without breakout is high", () => {
+  test("confirmed jsTemplateLiteral with backslash is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['\\'], context: 'jsTemplateLiteral'
+    })).toBe('high');
+  });
+
+  test("confirmed jsTemplateLiteral without escape chars is low", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['>'], context: 'jsTemplateLiteral'
-    })).toBe('high');
+    })).toBe('low');
   });
 
   // Feature 5: base tag injection
