@@ -869,7 +869,7 @@ const ResponseBodyPayloadGenerator = class {
 				out.push({ char: payload, context: "dataUri" });
 			}
 		}
-		const _templateLiteralChars = new Set(["$", "{", "}", "`", "\\", "<", ">", "/", ";"]);
+		const _templateLiteralChars = new Set(["$", "{", "}", "`", "\\", "<", ">", "/", ";", "(", ")", "*"]);
 		if (ctx.context.includes("jsTemplateLiteral") && _templateLiteralChars.has(payload)) {
 			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
 				out.push({ char: payload, context: "jsTemplateLiteral" });
@@ -886,7 +886,7 @@ const ResponseBodyPayloadGenerator = class {
 				out.push({ char: payload, context: "importMap" });
 			}
 		}
-		const _jsChars = new Set(["<", ">", "/", ";", "'", '"', "`"]);
+		const _jsChars = new Set(["<", ">", "/", ";", "'", '"', "`", "(", ")", "{", "}", "*"]);
 		if (ctx.context.includes("jsInQuote") && _jsChars.has(payload)) {
 			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
 				out.push({ char: payload, context: "jsInQuote" });
@@ -1332,6 +1332,9 @@ const ResponseBodyPayloadGenerator = class {
 				payloadSet.add(">");
 				payloadSet.add("/");
 				payloadSet.add(";");
+				payloadSet.add("(");
+				payloadSet.add(")");
+				payloadSet.add("*");
 			} else if (quote) {
 				payloadSet.add(quote);
 				payloadSet.add("\\");
@@ -1343,6 +1346,11 @@ const ResponseBodyPayloadGenerator = class {
 				payloadSet.add(">");
 				payloadSet.add("/");
 				payloadSet.add(";");
+				payloadSet.add("(");
+				payloadSet.add(")");
+				payloadSet.add("{");
+				payloadSet.add("}");
+				payloadSet.add("*");
 			} else {
 				payloadSet.add("<");
 				payloadSet.add(">");
@@ -1352,6 +1360,11 @@ const ResponseBodyPayloadGenerator = class {
 				payloadSet.add('"');
 				payloadSet.add("`");
 				payloadSet.add("\\");
+				payloadSet.add("(");
+				payloadSet.add(")");
+				payloadSet.add("{");
+				payloadSet.add("}");
+				payloadSet.add("*");
 			}
 			contextSet.add(ctx);
 			try {
