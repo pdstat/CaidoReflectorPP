@@ -42,7 +42,30 @@ const ResponseBodyPayloadGenerator = class {
 				if (!exclude.includes(tag) && (n as any).text?.includes(marker)) found = true;
 			}
 		});
+		if (!found && this.body.includes(marker)) {
+			found = !this._isInsideExcludedBlock(marker, exclude);
+		}
 		return found;
+	}
+
+	private _isInsideExcludedBlock(marker: string, exclude: string[]): boolean {
+		const bodyLC = this.body.toLowerCase();
+		const markerLC = marker.toLowerCase();
+		let pos = bodyLC.indexOf(markerLC);
+		while (pos !== -1) {
+			let inside = false;
+			for (const tag of exclude) {
+				const open = `<${tag.toLowerCase()}`;
+				const close = `</${tag.toLowerCase()}>`;
+				const lastOpen = bodyLC.lastIndexOf(open, pos);
+				if (lastOpen === -1) continue;
+				const lastClose = bodyLC.lastIndexOf(close, pos);
+				if (lastClose < lastOpen) { inside = true; break; }
+			}
+			if (!inside) return false;
+			pos = bodyLC.indexOf(markerLC, pos + 1);
+		}
+		return true;
 	}
 
 	private _htmlEntityDecode(s: string): string {
@@ -236,6 +259,15 @@ const ResponseBodyPayloadGenerator = class {
 				for (const cand of variants) {
 					if (srcLC.includes(cand.toLowerCase())) return true;
 				}
+				if (lower === "template") {
+					const inner = typeof (el as any).innerHTML === "string"
+						? (el as any).innerHTML.toLowerCase() : "";
+					if (inner) {
+						for (const cand of variants) {
+							if (inner.includes(cand.toLowerCase())) return true;
+						}
+					}
+				}
 			}
 		}
 		dbg(`no-hit`);
@@ -410,46 +442,51 @@ const ResponseBodyPayloadGenerator = class {
 		const inquote = payload === "/";
 		if (attrQuote) {
 			sdk.console.log(`\[Reflector++] checking [${payload}] is reflected in quoted attribute`);
-			const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
-			let found = false;
-			for (let i = 0; i < allEls.length && !found; i++) {
-				const el = allEls[i];
-				const attrs: Record<string, string> = (el as any).attributes || el.attributes;
-				for (const name in attrs) {
-					const raw = this._getRawAttrDetail(el, name);
-					if (!raw) continue;
-					const marker = prefix + payload + suffix;
-					if (raw.value.includes(marker)) {
-						out.push({ char: payload, context: "attributeInQuote" });
-						found = true;
-						break;
+			const marker = prefix + payload + suffix;
+			let aqFound = false;
+			if (this._markerInAnyAttr(marker)) {
+				out.push({ char: payload, context: "attributeInQuote" });
+				aqFound = true;
+			}
+			if (!aqFound) {
+				const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
+				for (const el of allEls) {
+					const attrs: Record<string, string> = (el as any).attributes || el.attributes;
+					for (const name in attrs) {
+						const decoded = attrs[name];
+						if (typeof decoded === "string" && decoded.includes(marker)) {
+							out.push({ char: payload, context: "attributeEscaped" });
+							aqFound = true;
+							break;
+						}
 					}
-					const decoded = attrs[name];
-					if (typeof decoded === "string" && decoded.includes(marker))
-						out.push({ char: payload, context: "attributeEscaped" });
+					if (aqFound) break;
 				}
 			}
 		}
 		if (eventHandler) {
-			const nodes: any[] = (this.root as any).querySelectorAll("*") as HTMLElement[];
-			let found = false;
-			for (const el of nodes) {
-				const attrs: Record<string, string> = (el as any).attributes || el.attributes;
-				for (const name in attrs) {
-					if (!/^on/i.test(name)) continue;
-					const raw = this._getRawAttrDetail(el as any, name);
-					if (!raw) continue;
-					const marker = prefix + payload + suffix;
-					if (raw.value.includes(marker)) {
-						out.push({ char: payload, context: "eventHandler" });
-						found = true;
-						break;
+			const marker = prefix + payload + suffix;
+			let ehFound = false;
+			if (this._markerInEventHandler(marker, true)
+				|| this._markerInEventHandler(marker, false)) {
+				out.push({ char: payload, context: "eventHandler" });
+				ehFound = true;
+			}
+			if (!ehFound) {
+				const nodes: any[] = (this.root as any).querySelectorAll("*") as HTMLElement[];
+				for (const el of nodes) {
+					const attrs: Record<string, string> = (el as any).attributes || el.attributes;
+					for (const name in attrs) {
+						if (!/^on/i.test(name)) continue;
+						const decoded = attrs[name];
+						if (typeof decoded === "string" && decoded.includes(marker)) {
+							out.push({ char: payload, context: "eventHandlerEscaped" });
+							ehFound = true;
+							break;
+						}
 					}
-					const decoded = attrs[name];
-					if (typeof decoded === "string" && decoded.includes(marker))
-						out.push({ char: payload, context: "eventHandlerEscaped" });
+					if (ehFound) break;
 				}
-				if (found) break;
 			}
 		}
 		if (js) {
@@ -460,6 +497,14 @@ const ResponseBodyPayloadGenerator = class {
 		if (css) {
 			if (this._isPayloadInSpecifiedContext("style", prefix + payload + suffix, inquote)) {
 				out.push({ char: payload, context: inquote ? "cssInQuote" : "css" });
+			}
+		}
+		const jsonCtx = ctx.context.includes("jsonInQuote") || ctx.context.includes("json");
+		if (jsonCtx) {
+			const isQuoted = ctx.context.includes("jsonInQuote");
+			const marker = prefix + payload + suffix;
+			if (this._markerInJsonScriptBlock(marker, isQuoted)) {
+				out.push({ char: payload, context: isQuoted ? "jsonInQuote" : "json" });
 			}
 		}
 	}
@@ -495,8 +540,22 @@ const ResponseBodyPayloadGenerator = class {
 			}
 		}
 		if (ctx.context.includes("templateHtml")) {
-			if (markers.some((m) => this._isPayloadInSpecifiedContext("template", m, false))) {
+			const inTemplate = markers.some((m) => this._isPayloadInSpecifiedContext("template", m, false))
+				|| markers.some((m) => this._markerInTemplateRaw(m));
+			if (inTemplate) {
 				out.push({ char: payload, context: "templateHtml" });
+				pushed = true;
+			}
+		}
+		if (ctx.context.includes("jsonInQuote")) {
+			if (markers.some((m) => this._markerInJsonScriptBlock(m, true))) {
+				out.push({ char: payload, context: "jsonInQuote" });
+				pushed = true;
+			}
+		}
+		if (ctx.context.includes("json") && !ctx.context.includes("jsonInQuote")) {
+			if (markers.some((m) => this._markerInJsonScriptBlock(m, false))) {
+				out.push({ char: payload, context: "json" });
 				pushed = true;
 			}
 		}
@@ -702,7 +761,8 @@ const ResponseBodyPayloadGenerator = class {
 			}
 		}
 		if (!matched && ctx.context.includes("templateHtml")) {
-			if (this._isPayloadInSpecifiedContext("template", marker, false)) {
+			if (this._isPayloadInSpecifiedContext("template", marker, false)
+				|| this._markerInTemplateRaw(marker)) {
 				out.push({ char: payload, context: "templateHtml" });
 				matched = true;
 			}
@@ -817,7 +877,8 @@ const ResponseBodyPayloadGenerator = class {
 			}
 		}
 		if (ctx.context.includes("templateHtml") && _htmlChars.has(payload)) {
-			if (this._isPayloadInSpecifiedContext("template", marker, false)) {
+			if (this._isPayloadInSpecifiedContext("template", marker, false)
+				|| this._markerInTemplateRaw(marker)) {
 				out.push({ char: payload, context: "templateHtml" });
 			}
 		}
@@ -920,6 +981,17 @@ const ResponseBodyPayloadGenerator = class {
 				if (!quoted && raw.quote === "" && raw.value.includes(marker)) return true;
 			}
 		}
+		if (this.body.includes(marker)) {
+			const re = /\bon[a-z]+\s*=\s*/gi;
+			let m;
+			while ((m = re.exec(this.body)) !== null) {
+				const start = m.index + m[0].length;
+				const tagEnd = this.body.indexOf('>', start);
+				const window = tagEnd === -1 ? 500 : tagEnd - start;
+				const region = this.body.substring(start, start + window);
+				if (region.includes(marker)) return true;
+			}
+		}
 		return false;
 	}
 
@@ -933,7 +1005,7 @@ const ResponseBodyPayloadGenerator = class {
 				if (raw && raw.value.includes(marker)) return true;
 			}
 		}
-		return false;
+		return this._markerInRawAttrFallback(marker);
 	}
 
 	private _markerInStyleAttr(marker: string): boolean {
@@ -944,7 +1016,7 @@ const ResponseBodyPayloadGenerator = class {
 			const raw = this._getRawAttrDetail(el, "style");
 			if (raw && raw.value.includes(marker)) return true;
 		}
-		return false;
+		return this._markerInRawAttrFallback(marker);
 	}
 
 	private _markerInAnyAttr(marker: string): boolean {
@@ -955,6 +1027,19 @@ const ResponseBodyPayloadGenerator = class {
 				const raw = this._getRawAttrDetail(el, name);
 				if (raw && raw.value.includes(marker)) return true;
 			}
+		}
+		return this._markerInRawAttrFallback(marker);
+	}
+
+	private _markerInRawAttrFallback(marker: string): boolean {
+		if (!this.body.includes(marker)) return false;
+		const tagRe = /<[a-z][a-z0-9]*\s/gi;
+		let tm;
+		while ((tm = tagRe.exec(this.body)) !== null) {
+			const tagEnd = this.body.indexOf('>', tm.index);
+			if (tagEnd === -1) continue;
+			const tagStr = this.body.substring(tm.index, tagEnd + 1);
+			if (tagStr.includes(marker)) return true;
 		}
 		return false;
 	}
@@ -968,7 +1053,7 @@ const ResponseBodyPayloadGenerator = class {
 			if (!raw) continue;
 			if (/\burl\s*\(/i.test(raw.value) && raw.value.includes(marker)) return true;
 		}
-		return false;
+		return this._markerInRawAttrFallback(marker);
 	}
 
 	private _markerInSrcsetAttr(marker: string): boolean {
@@ -979,7 +1064,7 @@ const ResponseBodyPayloadGenerator = class {
 			const raw = this._getRawAttrDetail(el, "srcset");
 			if (raw && raw.value.includes(marker)) return true;
 		}
-		return false;
+		return this._markerInRawAttrFallback(marker);
 	}
 
 	private _markerInMetaRefresh(marker: string): boolean {
@@ -1042,6 +1127,25 @@ const ResponseBodyPayloadGenerator = class {
 			} else {
 				if (src.includes(marker)) return true;
 			}
+		}
+		return false;
+	}
+
+	private _markerInTemplateRaw(marker: string): boolean {
+		if (!this.body.includes(marker)) return false;
+		const bodyLC = this.body.toLowerCase();
+		const open = '<template';
+		const close = '</template>';
+		let pos = 0;
+		while ((pos = bodyLC.indexOf(open, pos)) !== -1) {
+			const tagEnd = bodyLC.indexOf('>', pos + open.length);
+			if (tagEnd === -1) break;
+			const contentStart = tagEnd + 1;
+			const closePos = bodyLC.indexOf(close, contentStart);
+			if (closePos === -1) break;
+			const content = this.body.substring(contentStart, closePos);
+			if (content.includes(marker)) return true;
+			pos = closePos + close.length;
 		}
 		return false;
 	}
@@ -1402,6 +1506,8 @@ const ResponseBodyPayloadGenerator = class {
 			payloadSet.add("}");
 			payloadSet.add("]");
 			payloadSet.add(":");
+			payloadSet.add("<");
+			payloadSet.add("/");
 			try {
 				sdk?.console?.log?.(
 					`[Reflector++][gen] SCRIPT hit: type="${typeAttr}" exec=false ctx=${quotes.length ? "jsonInQuote" : "json"} quote=${JSON.stringify(

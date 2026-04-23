@@ -84,6 +84,10 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   if (canonical === CONTEXT.EVENT_HANDLER && chars.length > 0) {
     return 'critical';
   }
+  if ((canonical === CONTEXT.JSON_STRING || canonical === CONTEXT.JSON_STRUCTURE)
+      && hasScriptTagEscape(chars)) {
+    return 'critical';
+  }
 
   // High tier
   if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) {
@@ -103,6 +107,10 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
     return 'high';
   }
   if (canonical === CONTEXT.DATA_URI && chars.length > 0) return 'high';
+  if ((canonical === CONTEXT.JSON_STRING || canonical === CONTEXT.JSON_STRUCTURE)
+      && hasTagEscape(chars)) {
+    return 'high';
+  }
   if (canonical === CONTEXT.HTML_BASE_INJECTION && hasTagEscape(chars)) {
     return 'high';
   }

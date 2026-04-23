@@ -99,7 +99,7 @@ export async function runProbes(
         const quoteBreakable = successfulChars.has('"') || successfulChars.has("\\");
         const scriptBreakable = ctxArr.includes("jsonInQuote") && successfulChars.has("<");
         if (!quoteBreakable && !scriptBreakable) {
-            for (const sc of [",", "}", "]", ":"]) successfulChars.delete(sc);
+            for (const sc of [",", "}", "]", ":", "/"]) successfulChars.delete(sc);
             const hasExploitable = [...successfulChars].some(c => c !== "");
             if (!hasExploitable) confirmed = false;
         }

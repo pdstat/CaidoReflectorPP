@@ -39,9 +39,9 @@ export function resolveBestContext(
         else if (ctxArr.includes('templateHtml')) bestContext = 'Template HTML';
         else if (ctxArr.includes('jsonInQuote')) bestContext = 'JSON Script Block (string)';
         else if (ctxArr.includes('json')) bestContext = 'JSON Script Block';
-        else if (ctxArr.includes('domClobber')) bestContext = 'DOM Clobbering (id/name)';
         else if (ctxArr.includes('attributeInQuote')) bestContext = 'Tag Attribute (quoted) Value';
         else if (ctxArr.includes('attribute')) bestContext = 'Tag Attribute (unquoted) Value';
+        else if (ctxArr.includes('domClobber')) bestContext = 'DOM Clobbering (id/name)';
         else if (ctxArr.includes('attributeEscaped')) bestContext = 'Tag Attribute (encoded)';
         else if (ctxArr.includes('svgContext')) bestContext = 'SVG Context';
         else if (ctxArr.includes('mathContext')) bestContext = 'MathML Context';

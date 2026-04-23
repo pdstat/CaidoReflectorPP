@@ -127,9 +127,13 @@ function generateAssessment(
     return "Style injection";
   }
   if (canonical === CONTEXT.JSON_STRUCTURE) {
+    if (hasLt && chars.includes('/')) return "`</script>` breakout from JSON script block — full XSS";
+    if (hasLt) return "JSON script block with `<` — tag injection after breakout";
     return "JSON structure injection";
   }
   if (canonical === CONTEXT.JSON_STRING) {
+    if (hasLt && chars.includes('/')) return "`</script>` breakout from JSON script block — full XSS";
+    if (hasLt) return "JSON script block with `<` — tag injection after breakout";
     return "JSON string reflection (escaped)";
   }
   if (canonical === CONTEXT.RESPONSE_HEADER || headers?.length) {
@@ -222,6 +226,10 @@ function generateTestPayload(
   }
   if (canonical === CONTEXT.HTML) {
     if (hasLt) return `<img src=x onerror=alert(1)>`;
+    return undefined;
+  }
+  if (canonical === CONTEXT.JSON_STRING || canonical === CONTEXT.JSON_STRUCTURE) {
+    if (hasLt && chars.includes('/')) return `</script><svg onload=alert(1)>`;
     return undefined;
   }
   if (canonical === CONTEXT.CSS || canonical === CONTEXT.CSS_IN_QUOTE) {
