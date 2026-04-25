@@ -1466,6 +1466,7 @@ const ResponseBodyPayloadGenerator = class {
 				payloadSet.add(quote);
 				payloadSet.add("\\");
 				ctx = "jsInQuote";
+				contextSet.add(quote === '"' ? "jsInDQuote" : "jsInSQuote");
 				for (const q of ["'", '"', "`"]) {
 					if (q !== quote) payloadSet.add(q);
 				}
@@ -1784,6 +1785,7 @@ const ResponseBodyPayloadGenerator = class {
 					payloadSet.add(">");
 					payloadSet.add("&");
 					contextSet.add("attributeInQuote");
+					contextSet.add(raw.quote === '"' ? "attrInDQuote" : "attrInSQuote");
 				} else {
 					payloadSet.add("");
 					payloadSet.add(" ");

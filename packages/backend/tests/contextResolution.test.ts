@@ -98,4 +98,34 @@ describe("resolveBestContext", () => {
         const best = resolveBestContext(matches, html, undefined, { context: ["styleAttrInQuote", "cssUrl"] });
         expect(best).toBe("CSS url()");
     });
+
+    test("jsInQuote with jsInSQuote emits single-quote context label", () => {
+        const best = resolveBestContext(matches, html, undefined, { context: ["jsInQuote", "jsInSQuote"] });
+        expect(best).toBe("Script String (')");
+    });
+
+    test("jsInQuote with jsInDQuote emits double-quote context label", () => {
+        const best = resolveBestContext(matches, html, undefined, { context: ["jsInQuote", "jsInDQuote"] });
+        expect(best).toBe('Script String (")');
+    });
+
+    test("jsInQuote without quote marker defaults to double-quote", () => {
+        const best = resolveBestContext(matches, html, undefined, { context: ["jsInQuote"] });
+        expect(best).toBe('Script String (")');
+    });
+
+    test("attributeInQuote with attrInSQuote emits single-quote label", () => {
+        const best = resolveBestContext(matches, html, undefined, { context: ["attributeInQuote", "attrInSQuote"] });
+        expect(best).toBe("Tag Attribute (') Value");
+    });
+
+    test("attributeInQuote with attrInDQuote emits double-quote label", () => {
+        const best = resolveBestContext(matches, html, undefined, { context: ["attributeInQuote", "attrInDQuote"] });
+        expect(best).toBe('Tag Attribute (") Value');
+    });
+
+    test("attributeInQuote without quote marker defaults to generic label", () => {
+        const best = resolveBestContext(matches, html, undefined, { context: ["attributeInQuote"] });
+        expect(best).toBe("Tag Attribute (quoted) Value");
+    });
 });

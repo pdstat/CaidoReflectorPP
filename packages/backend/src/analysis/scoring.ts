@@ -19,12 +19,22 @@ const CSS_CONTEXTS = new Set<string>([
   CONTEXT.CSS, CONTEXT.CSS_IN_QUOTE
 ]);
 
-function hasQuoteBreakout(chars: string[]): boolean {
+function enclosingQuote(context: string): string | undefined {
+  if (context.includes("(')")) return "'";
+  if (context.includes('(")')) return '"';
+  return undefined;
+}
+
+function hasQuoteBreakout(chars: string[], context?: string): boolean {
+  if (context) {
+    const quote = enclosingQuote(context);
+    if (quote) return chars.includes(quote);
+  }
   return chars.includes('"') || chars.includes("'");
 }
 
-function hasStringEscape(chars: string[]): boolean {
-  return hasQuoteBreakout(chars)
+function hasStringEscape(chars: string[], context?: string): boolean {
+  return hasQuoteBreakout(chars, context)
     || chars.includes('`')
     || chars.includes('\\')
     || hasTagEscape(chars);
@@ -75,7 +85,7 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   }
   if (SCRIPT_CONTEXTS.has(canonical)) {
     const isString = canonical === CONTEXT.JS_IN_QUOTE;
-    if (isString && (hasQuoteBreakout(chars)
+    if (isString && (hasQuoteBreakout(chars, inp.context)
         || hasScriptTagEscape(chars))) {
       return 'critical';
     }
@@ -95,12 +105,12 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
     return 'low';
   }
   if (canonical === CONTEXT.JS_IN_QUOTE) {
-    if (hasStringEscape(chars)) return 'high';
+    if (hasStringEscape(chars, inp.context)) return 'high';
     return 'low';
   }
   if (canonical === CONTEXT.JS) return 'high';
   if (canonical === CONTEXT.EVENT_HANDLER) return 'high';
-  if (canonical === CONTEXT.ATTRIBUTE_IN_QUOTE && hasQuoteBreakout(chars)) {
+  if (canonical === CONTEXT.ATTRIBUTE_IN_QUOTE && hasQuoteBreakout(chars, inp.context)) {
     return 'high';
   }
   if (canonical === CONTEXT.IMPORT_MAP || canonical === CONTEXT.IMPORT_MAP_STRING) {

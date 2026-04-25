@@ -14,7 +14,11 @@ export function resolveBestContext(
         const ctxArr = contextInfo?.context ?? [];
         if (ctxArr.includes('jsTemplateLiteral')) bestContext = 'JS Template Literal';
         else if (ctxArr.includes('jsUri')) bestContext = 'JavaScript URI';
-        else if (ctxArr.includes('jsInQuote')) bestContext = 'Script String (")';
+        else if (ctxArr.includes('jsInQuote')) {
+            bestContext = ctxArr.includes('jsInSQuote')
+                ? "Script String (')"
+                : 'Script String (")';
+        }
         else if (ctxArr.includes('js')) bestContext = 'Script';
         else if (ctxArr.includes('importMapString')) bestContext = 'Import Map String';
         else if (ctxArr.includes('importMap')) bestContext = 'Import Map';
@@ -39,7 +43,13 @@ export function resolveBestContext(
         else if (ctxArr.includes('templateHtml')) bestContext = 'Template HTML';
         else if (ctxArr.includes('jsonInQuote')) bestContext = 'JSON Script Block (string)';
         else if (ctxArr.includes('json')) bestContext = 'JSON Script Block';
-        else if (ctxArr.includes('attributeInQuote')) bestContext = 'Tag Attribute (quoted) Value';
+        else if (ctxArr.includes('attributeInQuote')) {
+            bestContext = ctxArr.includes('attrInSQuote')
+                ? "Tag Attribute (') Value"
+                : ctxArr.includes('attrInDQuote')
+                    ? 'Tag Attribute (") Value'
+                    : 'Tag Attribute (quoted) Value';
+        }
         else if (ctxArr.includes('attribute')) bestContext = 'Tag Attribute (unquoted) Value';
         else if (ctxArr.includes('domClobber')) bestContext = 'DOM Clobbering (id/name)';
         else if (ctxArr.includes('attributeEscaped')) bestContext = 'Tag Attribute (encoded)';

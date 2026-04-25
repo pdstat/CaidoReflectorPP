@@ -13,6 +13,42 @@ describe("classifySeverity", () => {
     })).toBe('critical');
   });
 
+  test("single quote in double-quoted JS string is not critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ["'"], context: 'Script String (")'
+    })).toBe('low');
+  });
+
+  test("double quote in single-quoted JS string is not critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"'], context: "Script String (')"
+    })).toBe('low');
+  });
+
+  test("matching quote in double-quoted JS string is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"'], context: 'Script String (")'
+    })).toBe('critical');
+  });
+
+  test("matching quote in single-quoted JS string is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ["'"], context: "Script String (')"
+    })).toBe('critical');
+  });
+
+  test("non-matching quote in double-quoted attr is not high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ["'"], context: 'Tag Attribute (") Value'
+    })).toBe('low');
+  });
+
+  test("matching quote in double-quoted attr is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"'], context: 'Tag Attribute (") Value'
+    })).toBe('high');
+  });
+
   test("confirmed script string with < and / is critical", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['<', '/'], context: 'jsInQuote'
