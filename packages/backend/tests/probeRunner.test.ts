@@ -1,4 +1,4 @@
-import { runProbes } from "../src/analysis/bodyReflection/probeRunner.js";
+import { runProbes, runCountProbe } from "../src/analysis/bodyReflection/probeRunner.js";
 import { findMatches } from "../src/utils/text.js";
 import { ConfigStore } from "../src/stores/configStore.js";
 
@@ -404,5 +404,46 @@ describe("runProbes()", () => {
     expect(result.bestContext).toBe("jsonString");
     expect(jsonDetectImpl).toHaveBeenCalled();
     expect(mockDetectImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("runCountProbe()", () => {
+  test("returns matches and marker value when probe reflects", async () => {
+    const marker = "R".repeat(12);
+    const responseBody = `<html><p>${marker}</p><p>${marker}</p></html>`;
+    const sdk = buildSdk(async () => ({
+      response: buildResponse(responseBody)
+    }));
+    const result = await runCountProbe(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" }
+    );
+    expect(result).toBeDefined();
+    expect(result!.matches).toHaveLength(2);
+    expect(result!.value).toBe(marker);
+  });
+
+  test("returns zero matches when probe value not reflected", async () => {
+    const sdk = buildSdk(async () => ({
+      response: buildResponse("<html>no reflection</html>")
+    }));
+    const result = await runCountProbe(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" }
+    );
+    expect(result).toBeDefined();
+    expect(result!.matches).toHaveLength(0);
+  });
+
+  test("returns undefined on network error", async () => {
+    const sdk = buildSdk(async () => { throw new Error("network fail"); });
+    const result = await runCountProbe(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" }
+    );
+    expect(result).toBeUndefined();
   });
 });

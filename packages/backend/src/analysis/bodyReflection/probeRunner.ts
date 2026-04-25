@@ -17,6 +17,11 @@ export interface ProbeResult {
     probeWasStable: boolean;
 }
 
+export interface CountProbeResult {
+    matches: Array<[number, number]>;
+    value: string;
+}
+
 export async function runProbes(
     sdk: SDK,
     request: any,
@@ -105,4 +110,31 @@ export async function runProbes(
         }
     }
     return { confirmed, reflected, successfulChars, bestContext, probeWasStable };
+}
+
+export async function runCountProbe(
+    sdk: SDK,
+    request: any,
+    param: any
+): Promise<CountProbeResult | undefined> {
+    const marker = randomValue(12);
+    const probeSpec: any = request.toSpec();
+    mutateParamValue(probeSpec, param, marker, sdk as any);
+    sdk.console.log(
+        `[Reflector++] Count probe for "${param.key}" with marker ${marker}`
+    );
+    try {
+        const probe = await (sdk as any).requests.send(probeSpec);
+        const body = probe.response.getBody()?.toText() || '';
+        const matches = findMatches(body, marker, true, sdk);
+        sdk.console.log(
+            `[Reflector++] Count probe found ${matches.length} reflection(s)`
+        );
+        return { matches, value: marker };
+    } catch (e) {
+        (sdk as any).console.log(
+            `[Reflector++] Count probe error for ${param.key}: ${e}`
+        );
+        return undefined;
+    }
 }

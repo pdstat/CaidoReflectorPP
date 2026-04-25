@@ -12,7 +12,7 @@ import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGener
 import { getTags } from "./context.js";
 import { modifyAmbiguousParameters } from "./probes.js";
 import { errorParamsStore } from "../../stores/errorStore.js";
-import { runProbes } from "./probeRunner.js";
+import { runProbes, runCountProbe } from "./probeRunner.js";
 import { resolveBestContext } from "./contextResolution.js";
 import { detectEncodedOnly } from "./encodedSignalDetection.js";
 
@@ -83,7 +83,14 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
         }
       }
       const hasOther = Object.keys(otherContexts).length > 0;
-      reflectedParameters.push({ name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, value: param.value, confirmed: true, severity, otherContexts: hasOther ? otherContexts : undefined });
+      let finalMatches = baselineMatches;
+      let finalValue = param.value;
+      const countResult = await runCountProbe(sdk, request, param);
+      if (countResult && countResult.matches.length > 0) {
+        finalMatches = countResult.matches;
+        finalValue = countResult.value;
+      }
+      reflectedParameters.push({ name: param.key, matches: finalMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, value: finalValue, confirmed: true, severity, otherContexts: hasOther ? otherContexts : undefined });
     } else if (logUnconfirmed && reflected) {
       sdk.console.log(`[Reflector++] Logging unconfirmed reflection for "${param.key}" (probe markers reflected, no dangerous chars confirmed)`);
       reflectedParameters.push({ name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: undefined, source: param.source, value: param.value, confirmed: false, severity: 'info' });

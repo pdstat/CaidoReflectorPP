@@ -401,6 +401,22 @@ const ResponseBodyPayloadGenerator = class {
 			}
 			if (matched) break;
 		}
+		if (!matched) {
+			for (const el of execScripts) {
+				const src: string = typeof (el as any).rawText === "string"
+					? (el as any).rawText
+					: (typeof (el as any).text === "string" ? (el as any).text : "") || "";
+				if (!src) continue;
+				const srcLC = src.toLowerCase();
+				for (const cand of candidates) {
+					if (srcLC.includes(cand.toLowerCase())) {
+						matched = true;
+						break;
+					}
+				}
+				if (matched) break;
+			}
+		}
 		sdk?.console?.log?.(`[Reflector++][detect] jsInQuote result=${matched}`);
 		if (matched) out.push({ char: payload, context: "jsInQuote" });
 	}
@@ -420,7 +436,8 @@ const ResponseBodyPayloadGenerator = class {
 				prefix
 			)} suffix=${JSON.stringify(suffix)} marker=${JSON.stringify(marker)}`
 		);
-		const hit = this._isPayloadInSpecifiedContext("style", marker, true);
+		const hit = this._isPayloadInSpecifiedContext("style", marker, true)
+			|| this._isPayloadInSpecifiedContext("style", marker, false);
 		sdk.console.log(`[Reflector++][detect] cssInQuote result=${hit}`);
 		if (hit) out.push({ char: payload, context: "cssInQuote" });
 	}
@@ -577,6 +594,12 @@ const ResponseBodyPayloadGenerator = class {
 				pushed = true;
 			}
 		}
+		if (ctx.context.includes("htmlComment")) {
+			if (markers.some((m) => this.body.includes(m))) {
+				out.push({ char: payload, context: "htmlComment" });
+				pushed = true;
+			}
+		}
 		if (markers.some((m) => this._containsTextOutsideTags(m))) {
 			if (!pushed) out.push({ char: payload, context: "html" });
 		}
@@ -593,7 +616,8 @@ const ResponseBodyPayloadGenerator = class {
 		const marker = prefix + payload + suffix;
 		let matched = false;
 		if (!matched && ctx.context.includes("jsInQuote")) {
-			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
+			if (this._isPayloadInSpecifiedContext("script", marker, true)
+				|| this._isPayloadInSpecifiedContext("script", marker, false)) {
 				out.push({ char: payload, context: "jsInQuote" });
 				matched = true;
 			}
@@ -605,7 +629,8 @@ const ResponseBodyPayloadGenerator = class {
 			}
 		}
 		if (!matched && ctx.context.includes("cssInQuote")) {
-			if (this._isPayloadInSpecifiedContext("style", marker, true)) {
+			if (this._isPayloadInSpecifiedContext("style", marker, true)
+				|| this._isPayloadInSpecifiedContext("style", marker, false)) {
 				out.push({ char: payload, context: "cssInQuote" });
 				matched = true;
 			}
@@ -778,7 +803,7 @@ const ResponseBodyPayloadGenerator = class {
 	): void {
 		if (payload === "\\" || payload === "") return;
 		const marker = prefix + payload + suffix;
-		const _cssUrlChars = new Set([")", "(", "//", "http:", ";", "/", ":", " "]);
+		const _cssUrlChars = new Set([")", "(", "//", "http:", ";", "/", ":", " ", '"', "'"]);
 		if (ctx.context.includes("cssUrl") && _cssUrlChars.has(payload)) {
 			if (this._markerInCssUrl(marker)) {
 				out.push({ char: payload, context: "cssUrl" });
@@ -1086,7 +1111,7 @@ const ResponseBodyPayloadGenerator = class {
 			const isQuoted = raw.quote === '"' || raw.quote === "'";
 			if (quoted === isQuoted && raw.value.includes(marker)) return true;
 		}
-		return false;
+		return this._markerInRawAttrFallback(marker);
 	}
 
 	private _markerInImportMap(marker: string, inquote: boolean): boolean {
