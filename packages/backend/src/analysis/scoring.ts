@@ -34,10 +34,14 @@ function hasQuoteBreakout(chars: string[], context?: string): boolean {
 }
 
 function hasStringEscape(chars: string[], context?: string): boolean {
-  return hasQuoteBreakout(chars, context)
-    || chars.includes('`')
-    || chars.includes('\\')
-    || hasTagEscape(chars);
+  if (hasQuoteBreakout(chars, context)) return true;
+  if (chars.includes('\\')) return true;
+  if (hasTagEscape(chars)) return true;
+  if (chars.includes('`')) {
+    const quote = context ? enclosingQuote(context) : undefined;
+    if (!quote) return true;
+  }
+  return false;
 }
 
 function hasRedirectChars(chars: string[]): boolean {

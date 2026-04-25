@@ -149,6 +149,21 @@ s.prop1   = "saveandretrieve:hello:quote";
             const res = det(html, ["jsInQuote"], "PRE", "'", "SUF");
             expect(res).toHaveLength(0);
         });
+
+        test("escaped backslash in JS string → jsInQuoteEscaped, not literal", () => {
+            const html = `<script>var x = "PRE\\\\SUF";</script>`;
+            const res = det(html, ["jsInQuote"], "PRE", "\\", "SUF");
+            expect(res.length).toBeGreaterThan(0);
+            expect(res.map((r: any) => r.context)).toContain("jsInQuoteEscaped");
+            expect(res.map((r: any) => r.context)).not.toContain("jsInQuote");
+        });
+
+        test("literal backslash in JS string → jsInQuote", () => {
+            const html = `<script>var x = "PRE\\SUF";</script>`;
+            const res = det(html, ["jsInQuote"], "PRE", "\\", "SUF");
+            expect(res.length).toBeGreaterThan(0);
+            expect(res.map((r: any) => r.context)).toContain("jsInQuote");
+        });
     });
 
     describe("Other single-char probes: '/', ' ', '>' with context gating", () => {
@@ -229,10 +244,10 @@ s.prop1   = "saveandretrieve:hello:quote";
     });
 
     describe("Backslash ('\\\\') and empty payload ('') probes (literal-only)", () => {
-        test("Backslash inside JS quoted string → jsInQuote", () => {
+        test("Escaped backslash inside JS quoted string → jsInQuoteEscaped", () => {
             const html = `<script>const s='PRE\\\\SUF';</script>`;
             const res = det(html, ["jsInQuote"], "PRE", "\\", "SUF");
-            expect(res.map(r => r.context)).toContain("jsInQuote");
+            expect(res.map(r => r.context)).toContain("jsInQuoteEscaped");
             expect(res.map(r => r.char)).toContain("\\");
         });
 

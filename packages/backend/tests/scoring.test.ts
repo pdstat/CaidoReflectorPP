@@ -103,6 +103,18 @@ describe("classifySeverity", () => {
     })).toBe('high');
   });
 
+  test("backtick in double-quoted JS string is low (not a breakout)", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['`'], context: 'Script String (")'
+    })).toBe('low');
+  });
+
+  test("backtick in single-quoted JS string is low (not a breakout)", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['`'], context: "Script String (')"
+    })).toBe('low');
+  });
+
   test("confirmed script string with only parens/star is low", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['(', ')', '*'], context: 'jsInQuote'

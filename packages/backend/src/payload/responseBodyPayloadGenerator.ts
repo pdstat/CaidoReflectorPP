@@ -350,75 +350,94 @@ const ResponseBodyPayloadGenerator = class {
 				)} suffix=${JSON.stringify(suffix)} marker=${JSON.stringify(marker)}`
 			);
 		} catch { }
-		const candidates = new Set<string>();
-		const add = (s: string) => candidates.add(s);
-		add(marker);
-		add(marker.replace(/\\/g, "\\\\"));
+		const literalCandidates = new Set<string>();
+		const escapedCandidates = new Set<string>();
+		literalCandidates.add(marker);
+		escapedCandidates.add(marker.replace(/\\/g, "\\\\"));
 		for (const q of ['"', "'", "`"]) {
 			if (marker.includes(q)) {
 				const esc = marker.split(q).join("\\" + q);
-				add(esc);
-				add(esc.replace(/\\/g, "\\\\"));
+				escapedCandidates.add(esc);
+				escapedCandidates.add(esc.replace(/\\/g, "\\\\"));
 			}
 		}
-		for (const base of Array.from(candidates)) {
-			add(base.replace(/\\/g, "\\"));
-			add(base.replace(/\\/g, "\\\\\\"));
+		for (const base of Array.from(literalCandidates)) {
+			literalCandidates.add(base.replace(/\\/g, "\\"));
 		}
+		for (const base of Array.from(escapedCandidates)) {
+			escapedCandidates.add(base.replace(/\\/g, "\\\\\\"));
+		}
+		for (const lit of literalCandidates) escapedCandidates.delete(lit);
 		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
 		const execScripts = scripts.filter((el) =>
 			this._isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())
 		);
-		let matched = false;
-		for (const el of execScripts) {
-			const src: string = typeof (el as any).rawText === "string"
+		let literalMatch = false;
+		let escapedMatch = false;
+		const searchCandidates = (
+			cands: Set<string>,
+			srcs: { src: string }[]
+		): boolean => {
+			for (const { src } of srcs) {
+				for (const cand of cands) {
+					let pos = -1,
+						tries = 0;
+					while ((pos = src.indexOf(cand, pos + 1)) !== -1) {
+						const inside = this._isInsideJsQuotedStringAt(src, pos);
+						sdk?.console?.log?.(
+							`[Reflector++][detectCtx] try cand=${JSON.stringify(cand)} pos=${pos} inside=${inside}`
+						);
+						if (inside) return true;
+						if (++tries > 32) break;
+					}
+				}
+			}
+			return false;
+		};
+		const scriptSrcs = execScripts.map((el) => ({
+			src: typeof (el as any).rawText === "string"
 				? (el as any).rawText
-				: (typeof (el as any).text === "string" ? (el as any).text : "") || "";
-			if (!src) continue;
-			try {
-				const px = prefix.slice(0, 5),
-					sx = suffix.slice(-5);
+				: (typeof (el as any).text === "string" ? (el as any).text : "") || ""
+		})).filter(({ src }) => src.length > 0);
+		try {
+			const px = prefix.slice(0, 5),
+				sx = suffix.slice(-5);
+			for (const { src } of scriptSrcs) {
 				const iPx = px ? src.indexOf(px) : -1;
 				const iSx = sx ? src.indexOf(sx) : -1;
 				sdk?.console?.log?.(`[Reflector++][detectCtx] probe prefix=${JSON.stringify(px)} idx=${iPx}`);
 				sdk?.console?.log?.(`[Reflector++][detectCtx] probe suffix=${JSON.stringify(sx)} idx=${iSx}`);
-			} catch { }
-			for (const cand of candidates) {
-				let pos = -1,
-					tries = 0;
-				while ((pos = src.indexOf(cand, pos + 1)) !== -1) {
-					const inside = this._isInsideJsQuotedStringAt(src, pos);
-					sdk?.console?.log?.(
-						`[Reflector++][detectCtx] try cand=${JSON.stringify(cand)} pos=${pos} inside=${inside}`
-					);
-					if (inside) {
-						matched = true;
-						break;
-					}
-					if (++tries > 32) break;
-				}
-				if (matched) break;
 			}
-			if (matched) break;
+		} catch { }
+		literalMatch = searchCandidates(literalCandidates, scriptSrcs);
+		if (!literalMatch) {
+			escapedMatch = searchCandidates(escapedCandidates, scriptSrcs);
 		}
-		if (!matched) {
-			for (const el of execScripts) {
-				const src: string = typeof (el as any).rawText === "string"
-					? (el as any).rawText
-					: (typeof (el as any).text === "string" ? (el as any).text : "") || "";
-				if (!src) continue;
+		if (!literalMatch && !escapedMatch) {
+			for (const { src } of scriptSrcs) {
 				const srcLC = src.toLowerCase();
-				for (const cand of candidates) {
+				for (const cand of literalCandidates) {
 					if (srcLC.includes(cand.toLowerCase())) {
-						matched = true;
+						literalMatch = true;
 						break;
 					}
 				}
-				if (matched) break;
+				if (literalMatch) break;
+				for (const cand of escapedCandidates) {
+					if (srcLC.includes(cand.toLowerCase())) {
+						escapedMatch = true;
+						break;
+					}
+				}
+				if (escapedMatch) break;
 			}
 		}
-		sdk?.console?.log?.(`[Reflector++][detect] jsInQuote result=${matched}`);
-		if (matched) out.push({ char: payload, context: "jsInQuote" });
+		sdk?.console?.log?.(`[Reflector++][detect] jsInQuote literal=${literalMatch} escaped=${escapedMatch}`);
+		if (literalMatch) {
+			out.push({ char: payload, context: "jsInQuote" });
+		} else if (escapedMatch) {
+			out.push({ char: payload, context: "jsInQuoteEscaped" });
+		}
 	}
 
 	private _detectCssInQuote(
@@ -615,7 +634,10 @@ const ResponseBodyPayloadGenerator = class {
 		if (!(payload === "\\" || payload === "")) return;
 		const marker = prefix + payload + suffix;
 		let matched = false;
-		if (!matched && ctx.context.includes("jsInQuote")) {
+		const alreadyHasJsInQuote = out.some(
+			(r) => r.context === "jsInQuote" || r.context === "jsInQuoteEscaped"
+		);
+		if (!matched && !alreadyHasJsInQuote && ctx.context.includes("jsInQuote")) {
 			if (this._isPayloadInSpecifiedContext("script", marker, true)
 				|| this._isPayloadInSpecifiedContext("script", marker, false)) {
 				out.push({ char: payload, context: "jsInQuote" });
