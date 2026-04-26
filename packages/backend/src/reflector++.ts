@@ -39,6 +39,21 @@ export async function run(
         return;
     }
 
+    const pathBlocklist = ConfigStore.getPathBlocklist();
+    if (pathBlocklist.length > 0) {
+        const reqPath = request.getPath();
+        for (const pattern of pathBlocklist) {
+            try {
+                if (new RegExp(pattern).test(reqPath)) {
+                    sdk.console.log(`[Reflector++] Skipping scan - path "${reqPath}" matches blocklist pattern: ${pattern}`);
+                    return;
+                }
+            } catch {
+                // skip invalid regex patterns
+            }
+        }
+    }
+
     const LOG_UNCONFIRMED_FINDINGS = ConfigStore.getLogUnconfirmedFindings();
     const noSniffContentTypes = ConfigStore.getNoSniffContentTypes();
     sdk.console.log(`[Reflector++] Starting scan (Log unconfirmed findings: ${LOG_UNCONFIRMED_FINDINGS ? "enabled" : "disabled"})`);

@@ -16,6 +16,8 @@ export class ConfigStore {
 
     private _noSniffContentTypes: Set<string> = new Set<string>();
 
+    private _pathBlocklist: string[] = [];
+
     static getProbeOutOfScopeRequests(): boolean {
         return ConfigStore.instance._probeOutOfScopeRequests;
     }
@@ -62,6 +64,14 @@ export class ConfigStore {
 
     static setNoSniffContentTypes(value: Set<string>) {
         ConfigStore.instance._noSniffContentTypes = value;
+    }
+
+    static getPathBlocklist(): string[] {
+        return ConfigStore.instance._pathBlocklist;
+    }
+
+    static setPathBlocklist(value: string[]) {
+        ConfigStore.instance._pathBlocklist = value;
     }
 
     static getPassiveReflectionsOnly(): boolean {

@@ -6,6 +6,7 @@ const PROBE_OOS_STORAGE_KEY = "probeOutOfScope"
 const LOG_UNCONFIRMED_FINDINGS_STORAGE_KEY = "logUnconfirmedFindings"
 const CHECK_HEADER_REFLECTIONS_STORAGE_KEY = "checkResponseHeaderReflections"
 const CONTENT_TYPES_STORAGE_KEY = "noSniffContentTypes"
+const PATH_BLOCKLIST_STORAGE_KEY = "pathBlocklist"
 
 export class PluginSettings {
 
@@ -82,6 +83,15 @@ export class PluginSettings {
     public async setNoSniffContentTypes(value: Set<string>): Promise<void> {
         await this.sdk.backend.setNoSniffContentTypes(JSON.stringify(Array.from(value)));
         return this.set<Set<string>>(CONTENT_TYPES_STORAGE_KEY, value);
+    }
+
+    public getPathBlocklist(): string[] {
+        return this.get<string[]>(PATH_BLOCKLIST_STORAGE_KEY, []);
+    }
+
+    public async setPathBlocklist(value: string[]): Promise<void> {
+        await this.sdk.backend.setPathBlocklist(JSON.stringify(value));
+        return this.set<string[]>(PATH_BLOCKLIST_STORAGE_KEY, value);
     }
 
 };

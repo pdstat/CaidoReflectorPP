@@ -26,6 +26,7 @@ export type API = DefineAPI<{
     setCheckResponseHeaderReflections: (value: boolean) => Promise<void>;
     setLogUnconfirmedFindings: (value: boolean) => Promise<void>;
     setNoSniffContentTypes: (value: Set<string>) => Promise<void>;
+    setPathBlocklist: (value: string) => Promise<void>;
 }>;
 
 export function init(sdk: SDK<API>) {
@@ -41,6 +42,10 @@ export function init(sdk: SDK<API>) {
     })
     sdk.api.register("setLogUnconfirmedFindings", async (_sdk, value: boolean) => {
         ConfigStore.setLogUnconfirmedFindings(value)
+    })
+    sdk.api.register("setPathBlocklist", async (_sdk, value: string) => {
+        const parsed = JSON.parse(value);
+        ConfigStore.setPathBlocklist(parsed);
     })
     sdk.events.onInterceptResponse(async (sdk, request: Request, response: Response) => {
         const shouldProbe = ConfigStore.getProbeOutOfScopeRequests();

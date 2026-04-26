@@ -10,6 +10,7 @@ const probeOutOfScope = ref(false)
 const checkResponseHeaderReflections = ref(true)
 const logUnconfirmedFindings = ref(false)
 const noSniffContentTypes = ref<string>("")
+const pathBlocklist = ref<string>("")
 const loaded = ref(false)
 const settings = Reflector.settings
 
@@ -42,15 +43,33 @@ const resetContentTypes = async () => {
     }
 }
 
+const savePathBlocklist = async () => {
+    if (loaded.value) {
+        const patterns = pathBlocklist.value.split("\n")
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+        await settings.setPathBlocklist(patterns)
+    }
+}
+
+const clearPathBlocklist = async () => {
+    pathBlocklist.value = ""
+    if (loaded.value) {
+        await settings.setPathBlocklist([])
+    }
+}
+
 onMounted(async () => {
     probeOutOfScope.value = settings.getProbeOutOfScope() === true
     checkResponseHeaderReflections.value = settings.getCheckResponseHeaderReflections() === true
     logUnconfirmedFindings.value = settings.getLogUnconfirmedFindings() === true
     noSniffContentTypes.value = Array.from(settings.getNoSniffContentTypes()).sort().join("\n")
+    pathBlocklist.value = settings.getPathBlocklist().join("\n")
     settings.setCheckResponseHeaderReflections(checkResponseHeaderReflections.value)
     settings.setLogUnconfirmedFindings(logUnconfirmedFindings.value)
     settings.setProbeOutOfScope(probeOutOfScope.value)
     settings.setNoSniffContentTypes(settings.getNoSniffContentTypes())
+    settings.setPathBlocklist(settings.getPathBlocklist())
     loaded.value = true
 })
 
@@ -102,7 +121,7 @@ watch(logUnconfirmedFindings, async (v) => {
                                 @click="resetContentTypes" />
                         </div>
                     </div>
-                    <!--Toggle switches-->
+                    <!--Toggle switches and path blocklist-->
                     <div class="w-1/2 space-y-3">
                         <div class="flex flex-col gap-3">
                             <div class="flex items-center gap-2">
@@ -116,6 +135,25 @@ watch(logUnconfirmedFindings, async (v) => {
                             <div class="flex items-center gap-2">
                                 <ToggleSwitch v-model="logUnconfirmedFindings" :disabled="!loaded" />
                                 <label class="text-sm cursor-pointer select-none">Log unconfirmed (encoded) findings</label>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 space-y-3">
+                            <label class="text-lg block mb-2">
+                                Path Blocklist<br />
+                                <span class="text-sm text-muted">
+                                    Regex patterns matched against URL paths. One per line.
+                                </span>
+                            </label>
+
+                            <Textarea v-model="pathBlocklist" autoResize rows="8" class="w-full mb-4"
+                                spellcheck="false" placeholder="/metrics/\d+$&#10;/health&#10;/stats/" />
+
+                            <div class="button-row" role="group">
+                                <Button label="Save Blocklist" icon="fas fa-save" class="p-button-primary"
+                                    @click="savePathBlocklist" />
+                                <Button label="Clear Blocklist" icon="fas fa-trash-can" severity="secondary"
+                                    @click="clearPathBlocklist" />
                             </div>
                         </div>
                     </div>
