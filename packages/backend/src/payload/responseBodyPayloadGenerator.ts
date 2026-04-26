@@ -160,6 +160,25 @@ const ResponseBodyPayloadGenerator = class {
 		return Array.from(res);
 	}
 
+	isInScriptOutsideString(needle: string): boolean {
+		const scripts = (
+			(this.root as any).querySelectorAll?.("script") ?? []
+		) as any[];
+		for (const el of scripts) {
+			const type = (el.getAttribute?.("type") || "").toString();
+			if (!this._isJsExecutableScriptType(type)) continue;
+			const src: string = typeof el.rawText === "string"
+				? el.rawText
+				: (typeof el.text === "string" ? el.text : "");
+			if (!src) continue;
+			let pos = -1;
+			while ((pos = src.indexOf(needle, pos + 1)) !== -1) {
+				if (!this._isInsideJsQuotedStringAt(src, pos)) return true;
+			}
+		}
+		return false;
+	}
+
 	private _isInsideJsQuotedStringAt(src: string, idxStart: number): boolean {
 		let inQuote: '"' | "'" | "`" | null = null;
 		let escaped = false;

@@ -35,6 +35,7 @@ function hasQuoteBreakout(chars: string[], context?: string): boolean {
 
 function hasStringEscape(chars: string[], context?: string): boolean {
   if (hasQuoteBreakout(chars, context)) return true;
+  if (chars.includes('\\')) return true;
   if (hasTagEscape(chars)) return true;
   if (chars.includes('`')) {
     const quote = context ? enclosingQuote(context) : undefined;

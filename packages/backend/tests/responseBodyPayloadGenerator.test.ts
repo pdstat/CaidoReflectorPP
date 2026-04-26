@@ -1238,3 +1238,40 @@ describe("Feature 10: CSS exploitation primitives", () => {
         expect(res.map(r => r.context)).toContain("css");
     });
 });
+
+describe("isInScriptOutsideString", () => {
+    test("needle in raw JS code returns true", () => {
+        const pg = new ResponseBodyPayloadGenerator(
+            `<script>var x = NEEDLE + 1;</script>`
+        );
+        expect(pg.isInScriptOutsideString("NEEDLE")).toBe(true);
+    });
+
+    test("needle inside JS string returns false", () => {
+        const pg = new ResponseBodyPayloadGenerator(
+            `<script>var x = "NEEDLE";</script>`
+        );
+        expect(pg.isInScriptOutsideString("NEEDLE")).toBe(false);
+    });
+
+    test("needle after quote breakout returns true", () => {
+        const pg = new ResponseBodyPayloadGenerator(
+            `<script>var x = "prefix\\\\"NEEDLE";</script>`
+        );
+        expect(pg.isInScriptOutsideString("NEEDLE")).toBe(true);
+    });
+
+    test("needle in non-JS script type returns false", () => {
+        const pg = new ResponseBodyPayloadGenerator(
+            `<script type="application/json">{"k": NEEDLE}</script>`
+        );
+        expect(pg.isInScriptOutsideString("NEEDLE")).toBe(false);
+    });
+
+    test("needle outside script returns false", () => {
+        const pg = new ResponseBodyPayloadGenerator(
+            `<div>NEEDLE</div>`
+        );
+        expect(pg.isInScriptOutsideString("NEEDLE")).toBe(false);
+    });
+});

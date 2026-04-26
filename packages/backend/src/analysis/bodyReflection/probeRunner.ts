@@ -92,6 +92,42 @@ export async function runProbes(
             }
         } catch (e) { (sdk as any).console.log(`[Reflector++] Probe error for ${param.key}: ${e}`); }
     }
+    // Combo probe: when \ reflects in a JS string but the enclosing
+    // quote does not, test if \+quote bypasses the server's escaping
+    // (e.g. server escapes " to \" but not \, so \" → \\" = breakout).
+    if (successfulChars.has('\\') && confirmed) {
+        const quoteMatch = bestContext.match(/\((['"])\)$/);
+        const enclosingQuote = quoteMatch?.[1];
+        if (enclosingQuote && !successfulChars.has(enclosingQuote)) {
+            const combo = '\\' + enclosingQuote;
+            const pre = randomValue(5);
+            const suf = randomValue(5);
+            const injected = pre + encodeURIComponent(combo) + suf;
+            const probeSpec: any = request.toSpec();
+            mutateParamValue(probeSpec, param, injected, sdk as any);
+            sdk.console.log(
+                `[Reflector++] Combo probe \\${enclosingQuote}`
+                + ` for ${param.key}`
+            );
+            try {
+                const probe = await (sdk as any).requests.send(probeSpec);
+                const probeBody =
+                    probe.response.getBody()?.toText() || '';
+                const pg = new ResponseBodyPayloadGenerator(probeBody);
+                if (pg.isInScriptOutsideString(suf)) {
+                    sdk.console.log(
+                        `[Reflector++] Combo \\${enclosingQuote}`
+                        + ` broke out of string for ${param.key}`
+                    );
+                    successfulChars.add(enclosingQuote);
+                }
+            } catch (e) {
+                (sdk as any).console.log(
+                    `[Reflector++] Combo probe error: ${e}`
+                );
+            }
+        }
+    }
     // Post-processing: In JSON string contexts where quote breakout
     // is impossible (" and \ both escaped), structural chars (, } ] :)
     // are trapped and not exploitable. Remove them.
