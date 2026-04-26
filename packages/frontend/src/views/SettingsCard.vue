@@ -110,17 +110,17 @@ watch(logUnconfirmedFindings, async (v) => {
 
         <template #content>
             <div class="space-y-6">
-                <div class="flex space-x-6">
+                <div class="flex space-x-6 items-stretch">
                     <!--Content type settings-->
-                    <div class="w-1/2 space-y-3">
-                        <label class="text-lg block mb-2">
+                    <div class="w-1/2 flex flex-col gap-3">
+                        <label class="text-lg block">
                             Content Types<br />
                             <span class="text-sm text-muted">
                                 Content-Type mime response headers that will be checked for reflected values *
                             </span>
                         </label>
 
-                        <Textarea v-model="noSniffContentTypes" autoResize rows="15" class="w-full mb-4"
+                        <Textarea v-model="noSniffContentTypes" autoResize rows="15" class="w-full"
                             spellcheck="false" @beforeinput="validateBeforeInput" />
 
                         <div class="button-row" role="group">
@@ -131,7 +131,7 @@ watch(logUnconfirmedFindings, async (v) => {
                         </div>
                     </div>
                     <!--Toggle switches and path blocklist-->
-                    <div class="w-1/2 space-y-3">
+                    <div class="w-1/2 flex flex-col gap-3">
                         <div class="flex flex-col gap-3">
                             <div class="flex items-center gap-2">
                                 <ToggleSwitch v-model="enabled" :disabled="!loaded" />
@@ -151,15 +151,15 @@ watch(logUnconfirmedFindings, async (v) => {
                             </div>
                         </div>
 
-                        <div class="mt-4 space-y-3">
-                            <label class="text-lg block mb-2">
+                        <div class="flex flex-col gap-3 flex-1">
+                            <label class="text-lg block">
                                 Path Blocklist<br />
                                 <span class="text-sm text-muted">
                                     Regex patterns matched against URL paths. One per line.
                                 </span>
                             </label>
 
-                            <Textarea v-model="pathBlocklist" autoResize rows="8" class="w-full mb-4"
+                            <Textarea v-model="pathBlocklist" autoResize rows="8" class="w-full"
                                 spellcheck="false" placeholder="/metrics/\d+$&#10;/health&#10;/stats/" />
 
                             <div class="button-row" role="group">
@@ -180,6 +180,6 @@ watch(logUnconfirmedFindings, async (v) => {
 .button-row {
     display: inline-flex;
     gap: 1rem;
-    margin-top: .5rem;
+    margin-top: auto;
 }
 </style>
