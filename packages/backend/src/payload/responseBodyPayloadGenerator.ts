@@ -939,7 +939,7 @@ const ResponseBodyPayloadGenerator = class {
 		const _attrUnquotedChars = new Set([" ", '"', "'", ">", "<", ";", "="]);
 		if (ctx.context.includes("attribute")
 			&& _attrUnquotedChars.has(payload)) {
-			if (this._markerInAnyAttr(marker)) {
+			if (this._markerInAnyAttr(marker) || this.body.includes(marker)) {
 				out.push({ char: payload, context: "attribute" });
 			}
 		}
@@ -1171,6 +1171,7 @@ const ResponseBodyPayloadGenerator = class {
 				while ((pos = src.indexOf(marker, pos + 1)) !== -1) {
 					if (this._isInsideJsQuotedStringAt(src, pos)) return true;
 				}
+				if (src.includes(marker)) return true;
 			} else {
 				if (src.includes(marker)) return true;
 			}

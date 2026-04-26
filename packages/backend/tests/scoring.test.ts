@@ -91,10 +91,22 @@ describe("classifySeverity", () => {
     })).toBe('low');
   });
 
-  test("confirmed script string with backslash is high", () => {
+  test("confirmed script string with lone backslash is low", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['\\'], context: 'jsInQuote'
-    })).toBe('high');
+    })).toBe('low');
+  });
+
+  test("confirmed script string with backslash+matching quote is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['\\', '"'], context: 'Script String (")'
+    })).toBe('critical');
+  });
+
+  test("confirmed script string with backslash+non-matching quote is low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['\\', "'"], context: 'Script String (")'
+    })).toBe('low');
   });
 
   test("confirmed script string with backtick is high", () => {
