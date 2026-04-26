@@ -20,6 +20,7 @@ export interface ProbeResult {
 export interface CountProbeResult {
     matches: Array<[number, number]>;
     value: string;
+    code: number;
 }
 
 export async function runProbes(
@@ -166,7 +167,8 @@ export async function runCountProbe(
         sdk.console.log(
             `[Reflector++] Count probe found ${matches.length} reflection(s)`
         );
-        return { matches, value: marker };
+        const code = probe.response.getCode?.() ?? 0;
+        return { matches, value: marker, code };
     } catch (e) {
         (sdk as any).console.log(
             `[Reflector++] Count probe error for ${param.key}: ${e}`

@@ -103,7 +103,7 @@ describe("checkBodyReflections (expanded)", () => {
         expect(Array.isArray(out)).toBe(true);
     });
 
-    test("path segment: keeps baseline count when count probe finds fewer matches", async () => {
+    test("path segment: uses count probe result as true reflection count", async () => {
         const pathSeg = "wspd_cgi";
         const html = [
             `<script>`,
@@ -114,13 +114,9 @@ describe("checkBodyReflections (expanded)", () => {
             `</script>`
         ].join("\n");
 
-        let probeCall = 0;
         const sdk = makeSdk((spec) => {
-            probeCall++;
             const path = spec.getPath?.() || '';
-            const query = spec.getQuery?.() || '';
-            const injected = query || path;
-            const markerMatch = path.match(/\/cgi\/([a-z0-9]+)\//);
+            const markerMatch = path.match(/\/cgi\/([a-zA-Z0-9]+)\//);
             const marker = markerMatch?.[1] || '';
             if (marker && marker !== pathSeg) {
                 return {
@@ -144,8 +140,80 @@ describe("checkBodyReflections (expanded)", () => {
 
         const match = out.find(r => r.name.includes(pathSeg));
         if (match) {
-            expect(match.matches.length).toBeGreaterThanOrEqual(4);
+            expect(match.matches.length).toBe(1);
         }
+    });
+
+    test("path segment: suppresses false positive when count probe finds 0 reflections", async () => {
+        const pathSeg = "customer";
+        const html = [
+            `<html>`,
+            `<style>.customer-reviews { display: block; }</style>`,
+            `<body class="customer-account-index">`,
+            `<script>`,
+            `  var customerData = {};`,
+            `  var reloadCustomerSection = function() {};`,
+            `  console.log("customer loaded");`,
+            `</script>`,
+            `<div class="customer-info">Hello customer</div>`,
+            `</body></html>`
+        ].join("\n");
+
+        const sdk = makeSdk((spec) => {
+            const path = spec.getPath?.() || '';
+            const hasOrigSeg = path.includes(`/${pathSeg}/`);
+            if (!hasOrigSeg) {
+                return {
+                    body: [
+                        `<html><body>`,
+                        `<h1>404 Not Found</h1>`,
+                        `<p>The page you requested was not found.</p>`,
+                        `</body></html>`
+                    ].join("\n")
+                };
+            }
+            return { body: html };
+        });
+
+        const out = await checkBodyReflections({
+            request: baseRequest('', { path: `/store/${pathSeg}/account` }),
+            response: makeResponse(html)
+        }, sdk);
+
+        const match = out.find(r => r.name.includes(pathSeg));
+        expect(match).toBeUndefined();
+    });
+
+    test("path segment: suppresses unconfirmed error-page reflection via status code check", async () => {
+        const pathSeg = "account";
+        const html = [
+            `<html>`,
+            `<style>.customer-account-nav { width: 200px; }</style>`,
+            `<body class="customer-account-index">`,
+            `<nav><a href="/customer/account">My Account</a></nav>`,
+            `</body></html>`
+        ].join("\n");
+
+        const sdk = makeSdk((spec) => {
+            const path = spec.getPath?.() || '';
+            const segments = path.split('/').filter(Boolean);
+            const lastSeg = segments[segments.length - 1] || '';
+            if (lastSeg !== pathSeg) {
+                return {
+                    code: 404,
+                    body: `<html><body><pre>Cannot GET ${path}</pre></body></html>`
+                };
+            }
+            return { body: html };
+        });
+
+        const out = await checkBodyReflections({
+            request: baseRequest('', { path: `/store/customer/${pathSeg}` }),
+            response: makeResponse(html)
+        }, sdk, true);
+
+        const match = out.find(r => r.name.includes(pathSeg));
+        expect(match).toBeUndefined();
     });
 
     test("query param: uses count probe matches when count >= baseline", async () => {

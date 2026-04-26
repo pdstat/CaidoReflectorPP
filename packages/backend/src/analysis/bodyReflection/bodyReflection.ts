@@ -69,6 +69,20 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
     let bestContext = resolveBestContext(baselineMatches, bodyText, tags, contextInfo);
 
     const { confirmed, reflected, successfulChars: probeChars, bestContext: resolvedCtx } = await runProbes(sdk, request, param, contextInfo, baselineMatches, baselineCode, baselineSig, bodyText, KEY_WORDS, bestContext);
+
+    let pathCountResult: Awaited<ReturnType<typeof runCountProbe>>;
+    if (param.source === 'Path' && (confirmed || reflected)) {
+      pathCountResult = await runCountProbe(sdk, request, param);
+      if (pathCountResult && pathCountResult.matches.length === 0) {
+        sdk.console.log(`[Reflector++] Path segment "${param.key}" — count probe found 0 reflections, suppressing false positive (baseline had ${baselineMatches.length} natural word matches)`);
+        continue;
+      }
+      if (!confirmed && pathCountResult && pathCountResult.code !== baselineCode) {
+        sdk.console.log(`[Reflector++] Path segment "${param.key}" — count probe returned ${pathCountResult.code} (baseline ${baselineCode}), suppressing unconfirmed error-page reflection`);
+        continue;
+      }
+    }
+
     if (confirmed) {
       const allowedChars = Array.from(probeChars);
       const severity = classifySeverity({ confirmed, allowedChars, context: resolvedCtx, header: false });
@@ -85,10 +99,15 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
       const hasOther = Object.keys(otherContexts).length > 0;
       let finalMatches = baselineMatches;
       let finalValue = param.value;
-      const countResult = await runCountProbe(sdk, request, param);
-      if (countResult && countResult.matches.length >= baselineMatches.length) {
-        finalMatches = countResult.matches;
-        finalValue = countResult.value;
+      if (param.source === 'Path' && pathCountResult) {
+        finalMatches = pathCountResult.matches;
+        finalValue = pathCountResult.value;
+      } else {
+        const countResult = await runCountProbe(sdk, request, param);
+        if (countResult && countResult.matches.length >= baselineMatches.length) {
+          finalMatches = countResult.matches;
+          finalValue = countResult.value;
+        }
       }
       reflectedParameters.push({ name: param.key, matches: finalMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, value: finalValue, confirmed: true, severity, otherContexts: hasOther ? otherContexts : undefined });
     } else if (logUnconfirmed && reflected) {
