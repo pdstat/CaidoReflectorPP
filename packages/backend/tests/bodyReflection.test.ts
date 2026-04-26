@@ -184,7 +184,7 @@ describe("checkBodyReflections (expanded)", () => {
         expect(match).toBeUndefined();
     });
 
-    test("path segment: suppresses unconfirmed error-page reflection via status code check", async () => {
+    test("path segment: suppresses error-page reflection via status code check (unconfirmed)", async () => {
         const pathSeg = "account";
         const html = [
             `<html>`,
@@ -213,6 +213,30 @@ describe("checkBodyReflections (expanded)", () => {
         }, sdk, true);
 
         const match = out.find(r => r.name.includes(pathSeg));
+        expect(match).toBeUndefined();
+    });
+
+    test("path segment: suppresses confirmed error-page reflection when count probe returns different status code", async () => {
+        const pathSeg = "srcset";
+        const html = `<html><head><title>Srcset</title></head><body><img srcset="test.jpg 1x" src="default.jpg"></body></html>`;
+
+        const sdk = makeSdk((spec) => {
+            const path = spec.getPath?.() || '';
+            if (!path.startsWith(`/${pathSeg}`)) {
+                return {
+                    code: 404,
+                    body: `<!DOCTYPE html><html><body><pre>Cannot GET ${path}</pre></body></html>`
+                };
+            }
+            return { body: html };
+        });
+
+        const out = await checkBodyReflections({
+            request: baseRequest('q=testval', { path: `/${pathSeg}` }),
+            response: makeResponse(html)
+        }, sdk, true);
+
+        const match = out.find(r => r.name.includes(pathSeg) && r.source === 'Path');
         expect(match).toBeUndefined();
     });
 

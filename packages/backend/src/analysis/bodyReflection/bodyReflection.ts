@@ -77,8 +77,8 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
         sdk.console.log(`[Reflector++] Path segment "${param.key}" — count probe found 0 reflections, suppressing false positive (baseline had ${baselineMatches.length} natural word matches)`);
         continue;
       }
-      if (!confirmed && pathCountResult && pathCountResult.code !== baselineCode) {
-        sdk.console.log(`[Reflector++] Path segment "${param.key}" — count probe returned ${pathCountResult.code} (baseline ${baselineCode}), suppressing unconfirmed error-page reflection`);
+      if (pathCountResult && pathCountResult.code !== baselineCode) {
+        sdk.console.log(`[Reflector++] Path segment "${param.key}" — count probe returned ${pathCountResult.code} (baseline ${baselineCode}), suppressing error-page reflection`);
         continue;
       }
     }
