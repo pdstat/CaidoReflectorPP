@@ -2,6 +2,7 @@ import { NO_SNIFF_CONTENT_TYPES } from "./core/constants.js";
 import { StorageSDK } from "@caido/sdk-frontend/src/types/storage";
 import { FrontendSDK } from "@/types";
 
+const ENABLED_STORAGE_KEY = "enabled"
 const PROBE_OOS_STORAGE_KEY = "probeOutOfScope"
 const LOG_UNCONFIRMED_FINDINGS_STORAGE_KEY = "logUnconfirmedFindings"
 const CHECK_HEADER_REFLECTIONS_STORAGE_KEY = "checkResponseHeaderReflections"
@@ -38,6 +39,15 @@ export class PluginSettings {
         settings[key] = value;
 
         return this.storage.set(settings);
+    }
+
+    public getEnabled(): boolean {
+        return this.get<boolean>(ENABLED_STORAGE_KEY, true);
+    }
+
+    public async setEnabled(value: boolean): Promise<void> {
+        await this.sdk.backend.setEnabled(value);
+        return this.set<boolean>(ENABLED_STORAGE_KEY, value);
     }
 
     public getProbeOutOfScope(): boolean {

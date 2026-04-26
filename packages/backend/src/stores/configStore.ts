@@ -2,6 +2,8 @@ export class ConfigStore {
 
     public static readonly instance = new ConfigStore();
 
+    private _enabled = true;
+
     private _passiveReflectionsOnly = false;
 
     private _probeOutOfScopeRequests = false;
@@ -17,6 +19,14 @@ export class ConfigStore {
     private _noSniffContentTypes: Set<string> = new Set<string>();
 
     private _pathBlocklist: string[] = [];
+
+    static getEnabled(): boolean {
+        return ConfigStore.instance._enabled;
+    }
+
+    static setEnabled(value: boolean) {
+        ConfigStore.instance._enabled = value;
+    }
 
     static getProbeOutOfScopeRequests(): boolean {
         return ConfigStore.instance._probeOutOfScopeRequests;

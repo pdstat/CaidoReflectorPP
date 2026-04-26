@@ -22,6 +22,7 @@ const withTimeout: WithTimeout = (asyncOperation, timeoutMs) => {
 };
 
 export type API = DefineAPI<{
+    setEnabled: (value: boolean) => Promise<void>;
     setProbeOutOfScope: (value: boolean) => Promise<void>;
     setCheckResponseHeaderReflections: (value: boolean) => Promise<void>;
     setLogUnconfirmedFindings: (value: boolean) => Promise<void>;
@@ -30,6 +31,9 @@ export type API = DefineAPI<{
 }>;
 
 export function init(sdk: SDK<API>) {
+    sdk.api.register("setEnabled", async (_sdk, value: boolean) => {
+        ConfigStore.setEnabled(value)
+    })
     sdk.api.register("setProbeOutOfScope", async (_sdk, value: boolean) => {
         ConfigStore.setProbeOutOfScopeRequests(value)
     })
@@ -48,6 +52,7 @@ export function init(sdk: SDK<API>) {
         ConfigStore.setPathBlocklist(parsed);
     })
     sdk.events.onInterceptResponse(async (sdk, request: Request, response: Response) => {
+        if (!ConfigStore.getEnabled()) return;
         const shouldProbe = ConfigStore.getProbeOutOfScopeRequests();
         sdk.console.log(`Reflector++: shouldProbe=${shouldProbe}, inScope=${sdk.requests.inScope(request)}`);
         if ((!sdk.requests.inScope(request) && shouldProbe)

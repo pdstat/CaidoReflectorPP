@@ -6,6 +6,7 @@ import ToggleSwitch from 'primevue/toggleswitch';
 import { ref, onMounted, watch } from "vue"
 import { Reflector } from "@/types"
 
+const enabled = ref(true)
 const probeOutOfScope = ref(false)
 const checkResponseHeaderReflections = ref(true)
 const logUnconfirmedFindings = ref(false)
@@ -60,17 +61,25 @@ const clearPathBlocklist = async () => {
 }
 
 onMounted(async () => {
+    enabled.value = settings.getEnabled() === true
     probeOutOfScope.value = settings.getProbeOutOfScope() === true
     checkResponseHeaderReflections.value = settings.getCheckResponseHeaderReflections() === true
     logUnconfirmedFindings.value = settings.getLogUnconfirmedFindings() === true
     noSniffContentTypes.value = Array.from(settings.getNoSniffContentTypes()).sort().join("\n")
     pathBlocklist.value = settings.getPathBlocklist().join("\n")
+    settings.setEnabled(enabled.value)
     settings.setCheckResponseHeaderReflections(checkResponseHeaderReflections.value)
     settings.setLogUnconfirmedFindings(logUnconfirmedFindings.value)
     settings.setProbeOutOfScope(probeOutOfScope.value)
     settings.setNoSniffContentTypes(settings.getNoSniffContentTypes())
     settings.setPathBlocklist(settings.getPathBlocklist())
     loaded.value = true
+})
+
+watch(enabled, async (v) => {
+    if (loaded.value) {
+        await settings.setEnabled(v)
+    }
 })
 
 watch(probeOutOfScope, async (v) => {
@@ -124,6 +133,10 @@ watch(logUnconfirmedFindings, async (v) => {
                     <!--Toggle switches and path blocklist-->
                     <div class="w-1/2 space-y-3">
                         <div class="flex flex-col gap-3">
+                            <div class="flex items-center gap-2">
+                                <ToggleSwitch v-model="enabled" :disabled="!loaded" />
+                                <label class="text-sm cursor-pointer select-none font-semibold">Enable scanning</label>
+                            </div>
                             <div class="flex items-center gap-2">
                                 <ToggleSwitch v-model="probeOutOfScope" :disabled="!loaded" />
                                 <label class="text-sm cursor-pointer select-none">Probe out of scope requests</label>
