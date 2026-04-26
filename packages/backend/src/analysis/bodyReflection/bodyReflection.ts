@@ -86,7 +86,7 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
       let finalMatches = baselineMatches;
       let finalValue = param.value;
       const countResult = await runCountProbe(sdk, request, param);
-      if (countResult && countResult.matches.length > 0) {
+      if (countResult && countResult.matches.length >= baselineMatches.length) {
         finalMatches = countResult.matches;
         finalValue = countResult.value;
       }

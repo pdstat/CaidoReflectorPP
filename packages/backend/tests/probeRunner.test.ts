@@ -58,6 +58,19 @@ function buildRequestSpec(initialQuery = "p=orig") {
   };
 }
 
+function buildPathRequestSpec(initialPath = "/seg0/seg1") {
+  let currentPath = initialPath;
+  return {
+    getQuery: () => "",
+    setQuery: (_: string) => {},
+    getPath: () => currentPath,
+    setPath: (p: string) => { currentPath = p; },
+    getBody: (): null => null,
+    setBody: (_: string) => {},
+    getHeader: (_: string): undefined => undefined
+  };
+}
+
 function buildRequestWrapper(spec = buildRequestSpec()) {
   return { toSpec: () => spec };
 }
@@ -445,5 +458,38 @@ describe("runCountProbe()", () => {
       { key: "p", source: "URL", value: "orig" }
     );
     expect(result).toBeUndefined();
+  });
+
+  test("path param: marker URL-encoded in path, found decoded in body", async () => {
+    const marker = "R".repeat(12);
+    const responseBody = `<script>var u="/cgi/${marker}/page";</script>`;
+    const spec = buildPathRequestSpec("/cgi/original/page");
+    const sdk = buildSdk(async () => ({
+      response: buildResponse(responseBody)
+    }));
+    const result = await runCountProbe(
+      sdk,
+      { toSpec: () => spec },
+      { key: "path:1:original", source: "Path", value: "original" }
+    );
+    expect(result).toBeDefined();
+    expect(result!.matches).toHaveLength(1);
+    expect(result!.value).toBe(marker);
+  });
+
+  test("path param: static content has fewer marker matches than baseline value", async () => {
+    const marker = "R".repeat(12);
+    const responseBody = `<script>var a="/cgi/${marker}/p"; var b="/cgi/original/x"; var c="/cgi/original/y";</script>`;
+    const spec = buildPathRequestSpec("/cgi/original/page");
+    const sdk = buildSdk(async () => ({
+      response: buildResponse(responseBody)
+    }));
+    const result = await runCountProbe(
+      sdk,
+      { toSpec: () => spec },
+      { key: "path:1:original", source: "Path", value: "original" }
+    );
+    expect(result).toBeDefined();
+    expect(result!.matches).toHaveLength(1);
   });
 });

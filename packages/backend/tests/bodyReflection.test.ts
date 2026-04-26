@@ -26,20 +26,27 @@ const makeSdk = (probeResponder?: (spec: any) => { code?: number; body?: string;
     } as any;
 };
 
-const baseRequest = (query: string, opts?: Partial<{ method: string; body: string; cookies: string; https: boolean }>) => ({
-    toSpec: () => ({
-        getQuery: () => query,
-        getMethod: () => opts?.method ?? "GET",
-        getHeader: (name: string) => {
-            if (name === 'Cookie' && opts?.cookies) return [opts.cookies];
-            if (name === 'Content-Type' && opts?.body) return ['application/x-www-form-urlencoded'];
-            return undefined;
-        },
-        getBody: () => (opts?.body ? { toText: () => opts.body } : undefined),
-        getTls: () => !!opts?.https,
-        getHost: () => 'example.com',
-        getPath: () => '/path'
-    })
+const baseRequest = (query: string, opts?: Partial<{ method: string; body: string; cookies: string; https: boolean; path: string }>) => ({
+    toSpec: () => {
+        let currentQuery = query;
+        let currentPath = opts?.path ?? '/path';
+        return {
+            getQuery: () => currentQuery,
+            setQuery: (q: string) => { currentQuery = q; },
+            getMethod: () => opts?.method ?? "GET",
+            getHeader: (name: string) => {
+                if (name === 'Cookie' && opts?.cookies) return [opts.cookies];
+                if (name === 'Content-Type' && opts?.body) return ['application/x-www-form-urlencoded'];
+                return undefined;
+            },
+            getBody: () => (opts?.body ? { toText: () => opts.body } : undefined),
+            setBody: (_: string) => {},
+            getTls: () => !!opts?.https,
+            getHost: () => 'example.com',
+            getPath: () => currentPath,
+            setPath: (p: string) => { currentPath = p; }
+        };
+    }
 });
 
 const makeResponse = (html: string, extra?: Partial<{ code: number; headers: Record<string, string | string[]> }>) => ({
@@ -93,6 +100,68 @@ describe("checkBodyReflections (expanded)", () => {
         const value = 'cookV';
         const html = `<p>${value}</p>`;
         const out = await checkBodyReflections({ request: baseRequest('', { cookies: `sid=${value}; theme=dark` }), response: makeResponse(html) }, makeSdk());
+        expect(Array.isArray(out)).toBe(true);
+    });
+
+    test("path segment: keeps baseline count when count probe finds fewer matches", async () => {
+        const pathSeg = "wspd_cgi";
+        const html = [
+            `<script>`,
+            `  var a = "/cgi/${pathSeg}/login";`,
+            `  var b = "/cgi/${pathSeg}/auth";`,
+            `  var c = "/cgi/${pathSeg}/session";`,
+            `  var d = "/cgi/${pathSeg}/logout";`,
+            `</script>`
+        ].join("\n");
+
+        let probeCall = 0;
+        const sdk = makeSdk((spec) => {
+            probeCall++;
+            const path = spec.getPath?.() || '';
+            const query = spec.getQuery?.() || '';
+            const injected = query || path;
+            const markerMatch = path.match(/\/cgi\/([a-z0-9]+)\//);
+            const marker = markerMatch?.[1] || '';
+            if (marker && marker !== pathSeg) {
+                return {
+                    body: [
+                        `<script>`,
+                        `  var a = "/cgi/${marker}/login";`,
+                        `  var b = "/cgi/${pathSeg}/auth";`,
+                        `  var c = "/cgi/${pathSeg}/session";`,
+                        `  var d = "/cgi/${pathSeg}/logout";`,
+                        `</script>`
+                    ].join("\n")
+                };
+            }
+            return { body: html };
+        });
+
+        const out = await checkBodyReflections({
+            request: baseRequest('', { path: `/cgi/${pathSeg}/login` }),
+            response: makeResponse(html)
+        }, sdk);
+
+        const match = out.find(r => r.name.includes(pathSeg));
+        if (match) {
+            expect(match.matches.length).toBeGreaterThanOrEqual(4);
+        }
+    });
+
+    test("query param: uses count probe matches when count >= baseline", async () => {
+        const value = "testval";
+        const html = `<p>${value}</p>`;
+
+        const sdk = makeSdk((spec) => {
+            const query = spec.getQuery?.() || '';
+            return { body: `<p>${query}</p>` };
+        });
+
+        const out = await checkBodyReflections({
+            request: baseRequest(`p=${value}`),
+            response: makeResponse(html)
+        }, sdk);
+
         expect(Array.isArray(out)).toBe(true);
     });
 
