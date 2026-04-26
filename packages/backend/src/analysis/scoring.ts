@@ -1,5 +1,6 @@
 import { CONTEXT, toCanonical } from './contextMap.js';
-import type { SeverityTier } from '../core/types.js';
+import type { SeverityTier, RedirectPosition } from '../core/types.js';
+import { classifyRedirectSeverity } from './redirectAnalysis.js';
 
 export type { SeverityTier };
 
@@ -9,6 +10,7 @@ export interface SeverityInputs {
   allowedChars: string[];
   header?: boolean;
   headerNames?: string[];
+  redirectPosition?: RedirectPosition;
 }
 
 const SCRIPT_CONTEXTS = new Set<string>([
@@ -42,10 +44,6 @@ function hasStringEscape(chars: string[], context?: string): boolean {
     if (!quote) return true;
   }
   return false;
-}
-
-function hasRedirectChars(chars: string[]): boolean {
-  return chars.includes('/') || chars.includes(':');
 }
 
 function hasCookieInjectionChars(chars: string[]): boolean {
@@ -132,8 +130,9 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
     const names = new Set(
       inp.headerNames?.map(h => h.toLowerCase()) ?? []
     );
-    if ((names.has('location') || names.has('refresh'))
-        && hasRedirectChars(chars)) return 'high';
+    if (names.has('location') || names.has('refresh')) {
+      return classifyRedirectSeverity(inp.redirectPosition, chars);
+    }
     if (names.has('set-cookie')
         && hasCookieInjectionChars(chars)) return 'high';
     if (names.has('content-security-policy')

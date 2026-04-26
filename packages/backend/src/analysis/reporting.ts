@@ -1,10 +1,12 @@
 import {
   AnalyzedReflectedParameter,
   SeverityTier,
+  RedirectPosition,
   SEVERITY_ORDER
 } from "../core/types.js";
 import { prettyPrintContext, toCanonical, CONTEXT } from "./contextMap.js";
 import { mergeEncodedSignals, EncodedSignalEntry } from "./mergeEncodedSignals.js";
+import { getSubdomainBreakoutChars } from "./redirectAnalysis.js";
 
 export { prettyPrintContext as canonicalizeContext };
 
@@ -43,7 +45,8 @@ function hasClosingTagBreakout(chars: string[]): boolean {
 function generateAssessment(
   context: string,
   chars: string[],
-  headers?: string[]
+  headers?: string[],
+  redirectPosition?: RedirectPosition
 ): string {
   const canonical = toCanonical(context) ?? context;
   const hasQuote = chars.includes('"') || chars.includes("'");
@@ -139,7 +142,7 @@ function generateAssessment(
   if (canonical === CONTEXT.RESPONSE_HEADER || headers?.length) {
     const hdrLower = headers?.map(h => h.toLowerCase()) ?? [];
     if (hdrLower.includes("location") || hdrLower.includes("refresh")) {
-      return "Open redirect";
+      return redirectAssessment(redirectPosition, chars);
     }
     if (hdrLower.includes("set-cookie")) return "Cookie injection";
     if (hdrLower.includes("content-security-policy")) return "CSP bypass";
@@ -151,10 +154,43 @@ function generateAssessment(
   return "Reflection detected";
 }
 
+function redirectAssessment(
+  position: RedirectPosition | undefined,
+  chars: string[]
+): string {
+  switch (position) {
+    case 'full-url':
+      return "Open redirect — full URL control";
+    case 'scheme':
+      return "Scheme injection — protocol manipulation";
+    case 'host':
+      return "Open redirect — host control";
+    case 'subdomain': {
+      const breakouts = getSubdomainBreakoutChars(chars);
+      if (breakouts.length > 0) {
+        const charList = breakouts.map(c =>
+          c === '\\' ? '`\\\\`' : `\`${c}\``
+        ).join(', ');
+        return `Open redirect — subdomain breakout via ${charList}`;
+      }
+      return "Subdomain injection";
+    }
+    case 'path':
+      return "Path manipulation in redirect";
+    case 'query':
+      return "Parameter injection in redirect";
+    case 'fragment':
+      return "Fragment injection in redirect";
+    default:
+      return "Open redirect";
+  }
+}
+
 function generateTestPayload(
   context: string,
   chars: string[],
-  headers?: string[]
+  headers?: string[],
+  redirectPosition?: RedirectPosition
 ): string | undefined {
   const canonical = toCanonical(context) ?? context;
   const hasQuote = chars.includes('"') || chars.includes("'");
@@ -239,12 +275,39 @@ function generateTestPayload(
   if (canonical === CONTEXT.RESPONSE_HEADER || headers?.length) {
     const hdrLower = headers?.map(h => h.toLowerCase()) ?? [];
     if (hdrLower.includes("location") || hdrLower.includes("refresh")) {
-      return `https://evil.com`;
+      return redirectTestPayload(redirectPosition, chars);
     }
     if (hdrLower.includes("set-cookie")) return `; domain=attacker.com`;
     return undefined;
   }
   return undefined;
+}
+
+function redirectTestPayload(
+  position: RedirectPosition | undefined,
+  chars: string[]
+): string {
+  switch (position) {
+    case 'full-url':
+      return 'https://evil.com/';
+    case 'scheme':
+      return 'http';
+    case 'host':
+      return 'evil.com';
+    case 'subdomain': {
+      const breakouts = getSubdomainBreakoutChars(chars);
+      if (breakouts.length > 0) return `evil.com${breakouts[0]}`;
+      return 'evil';
+    }
+    case 'path':
+      return '../../../evil-page';
+    case 'query':
+      return '&evil=injected';
+    case 'fragment':
+      return '#evil-fragment';
+    default:
+      return 'https://evil.com';
+  }
 }
 
 function buildSnippets(
@@ -311,10 +374,12 @@ export function generateReport(
   }
 
   const assessment = generateAssessment(
-    param.context, param.aggressive ?? [], param.headers
+    param.context, param.aggressive ?? [], param.headers,
+    param.redirectPosition
   );
   const payload = generateTestPayload(
-    param.context, param.aggressive ?? [], param.headers
+    param.context, param.aggressive ?? [], param.headers,
+    param.redirectPosition
   );
   const quoteParts = [assessment];
   if (payload) quoteParts.push(`Test: \`${payload}\``);

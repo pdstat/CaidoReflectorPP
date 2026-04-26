@@ -213,6 +213,111 @@ describe("classifySeverity", () => {
     })).toBe('medium');
   });
 
+  // Position-aware Location header scoring
+  test("Location full-url position is high regardless of chars", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'full-url'
+    })).toBe('high');
+  });
+
+  test("Location host position is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'host'
+    })).toBe('high');
+  });
+
+  test("Location scheme position is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'scheme'
+    })).toBe('high');
+  });
+
+  test("Location subdomain with / breakout is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['/', ':'],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'subdomain'
+    })).toBe('high');
+  });
+
+  test("Location subdomain with ? breakout is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['?'],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'subdomain'
+    })).toBe('high');
+  });
+
+  test("Location subdomain with # breakout is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['#'],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'subdomain'
+    })).toBe('high');
+  });
+
+  test("Location subdomain with \\ breakout is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['\\'],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'subdomain'
+    })).toBe('high');
+  });
+
+  test("Location subdomain without breakout chars is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [':', '='],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'subdomain'
+    })).toBe('medium');
+  });
+
+  test("Location path position is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['/', '?'],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'path'
+    })).toBe('medium');
+  });
+
+  test("Location query position is low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['&', '='],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'query'
+    })).toBe('low');
+  });
+
+  test("Location fragment position is low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [],
+      context: 'Response Header', header: true,
+      headerNames: ['Location'], redirectPosition: 'fragment'
+    })).toBe('low');
+  });
+
+  test("Refresh host position is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [],
+      context: 'Response Header', header: true,
+      headerNames: ['Refresh'], redirectPosition: 'host'
+    })).toBe('high');
+  });
+
+  test("Refresh query position is low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['/'],
+      context: 'Response Header', header: true,
+      headerNames: ['Refresh'], redirectPosition: 'query'
+    })).toBe('low');
+  });
+
   test("confirmed HTML with < is medium", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['<'], context: 'html'

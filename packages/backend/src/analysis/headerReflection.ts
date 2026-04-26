@@ -3,6 +3,7 @@ import { classifySeverity } from "./scoring.js";
 import { enumerateRequestParameters } from "../utils/params.js";
 import { sendProbe } from "./bodyReflection/probes.js";
 import { ResponseHeaderPayloadGenerator } from "../payload/responseHeaderPayloadGenerator.ts";
+import { detectRedirectPosition } from "./redirectAnalysis.js";
 
 type ReflectedParameter = AnalyzedReflectedParameter;
 
@@ -79,12 +80,30 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
     if (confirmedHeaders.length > 0) {
       const syntheticMatches: Array<[number, number]> = confirmedHeaders.map((_, i) => [i, i]);
       const contextLabel = crlf ? "Response Splitting (CRLF)" : "Response Header";
+
+      let redirectPosition;
+      if (!crlf && param.value) {
+        for (const h of confirmedHeaders) {
+          const hLower = h.toLowerCase();
+          if (hLower === 'location' || hLower === 'refresh') {
+            const values = hdrs.get(h) ?? [];
+            if (values.length > 0) {
+              redirectPosition = detectRedirectPosition(
+                values[0], param.value, h
+              );
+            }
+            break;
+          }
+        }
+      }
+
       const severity = classifySeverity({
         confirmed: true,
         allowedChars,
         context: contextLabel,
         header: !crlf,
-        headerNames: confirmedHeaders
+        headerNames: confirmedHeaders,
+        redirectPosition
       });
       confirmed.push({
         name: param.key,
@@ -95,7 +114,8 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
         aggressive: allowedChars.length ? allowedChars : undefined,
         value: param.value,
         severity,
-        confirmed: true
+        confirmed: true,
+        redirectPosition
       });
     }
   }

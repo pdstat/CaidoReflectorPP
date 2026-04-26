@@ -27,6 +27,8 @@ module.exports = {
   '^./mergeEncodedSignals\\.js$': '<rootDir>/src/analysis/mergeEncodedSignals.ts',
   '^./contextMap\\.js$': '<rootDir>/src/analysis/contextMap.ts',
   '^../contextMap\\.js$': '<rootDir>/src/analysis/contextMap.ts',
+  '^./redirectAnalysis\\.js$': '<rootDir>/src/analysis/redirectAnalysis.ts',
+  '^../redirectAnalysis\\.js$': '<rootDir>/src/analysis/redirectAnalysis.ts',
   '^../encodedSignalsStore\\.js$': '<rootDir>/src/analysis/encodedSignalsStore.ts',
   '^./probeRunner\\.js$': '<rootDir>/src/analysis/bodyReflection/probeRunner.ts',
   '^./contextResolution\\.js$': '<rootDir>/src/analysis/bodyReflection/contextResolution.ts',
