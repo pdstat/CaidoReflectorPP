@@ -310,25 +310,46 @@ describe("buildFindingTitle", () => {
     expect(title).toBe('Reflected: (Medium) "next" in Location Header');
   });
 
-  test("set-cookie header shows cookie injection", () => {
+  test("set-cookie header with semicolon shows cookie injection", () => {
     const title = buildFindingTitle([{
       name: "lang", matches: [[0, 1]], context: "Response Header",
       severity: "high", confirmed: true, source: "URL",
-      headers: ["Set-Cookie"]
+      headers: ["Set-Cookie"], aggressive: [';']
     }], true);
     expect(title).toBe(
       'Reflected: (High) "lang" in Set-Cookie Header — Cookie Injection'
     );
   });
 
-  test("csp header shows CSP injection", () => {
+  test("set-cookie header without semicolon has no vuln label", () => {
+    const title = buildFindingTitle([{
+      name: "lang", matches: [[0, 1]], context: "Response Header",
+      severity: "medium", confirmed: true, source: "URL",
+      headers: ["Set-Cookie"], aggressive: ['<']
+    }], true);
+    expect(title).toBe(
+      'Reflected: (Medium) "lang" in Set-Cookie Header'
+    );
+  });
+
+  test("csp header with bypass chars shows CSP injection", () => {
     const title = buildFindingTitle([{
       name: "src", matches: [[0, 1]], context: "Response Header",
       severity: "high", confirmed: true, source: "URL",
-      headers: ["Content-Security-Policy"]
+      headers: ["Content-Security-Policy"], aggressive: [';']
     }], true);
     expect(title).toContain("Content-Security-Policy Header");
     expect(title).toContain("CSP Injection");
+  });
+
+  test("csp header without bypass chars has no vuln label", () => {
+    const title = buildFindingTitle([{
+      name: "src", matches: [[0, 1]], context: "Response Header",
+      severity: "medium", confirmed: true, source: "URL",
+      headers: ["Content-Security-Policy"], aggressive: ['<']
+    }], true);
+    expect(title).toContain("Content-Security-Policy Header");
+    expect(title).not.toContain("CSP Injection");
   });
 
   test("multiple header names shown", () => {

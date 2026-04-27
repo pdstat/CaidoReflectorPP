@@ -474,8 +474,12 @@ function headerVulnLabel(
       return 'Open Redirect';
     }
   }
-  if (names.has('set-cookie')) return 'Cookie Injection';
-  if (names.has('content-security-policy')) return 'CSP Injection';
+  const chars = param.aggressive ?? [];
+  if (names.has('set-cookie') && chars.includes(';')) return 'Cookie Injection';
+  if (names.has('content-security-policy')
+      && (chars.includes(';') || chars.includes("'") || chars.includes('*'))) {
+    return 'CSP Injection';
+  }
   if (names.has('access-control-allow-origin')) return 'CORS Misconfiguration';
   return undefined;
 }
