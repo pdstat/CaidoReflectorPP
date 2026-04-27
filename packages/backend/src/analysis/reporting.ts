@@ -463,6 +463,36 @@ export function buildStructuredDataBlock(
   return `<!-- REFLECTOR_DATA\n${JSON.stringify(data)}\n-->`;
 }
 
+function headerVulnLabel(
+  param: AnalyzedReflectedParameter
+): string | undefined {
+  const names = new Set(param.headers?.map(h => h.toLowerCase()) ?? []);
+  if (names.has('location') || names.has('refresh')) {
+    const pos = param.redirectPosition;
+    if (pos === 'full-url' || pos === 'host' || pos === 'scheme'
+        || pos === 'subdomain') {
+      return 'Open Redirect';
+    }
+  }
+  if (names.has('set-cookie')) return 'Cookie Injection';
+  if (names.has('content-security-policy')) return 'CSP Injection';
+  if (names.has('access-control-allow-origin')) return 'CORS Misconfiguration';
+  return undefined;
+}
+
+function headerContextLabel(
+  param: AnalyzedReflectedParameter
+): string {
+  const canonical = toCanonical(param.context) ?? param.context;
+  if (canonical !== CONTEXT.RESPONSE_HEADER || !param.headers?.length) {
+    return prettyPrintContext(param.context) ?? param.context;
+  }
+  const headerList = param.headers.slice(0, 2).join(", ");
+  const extra = param.headers.length > 2
+    ? ` +${param.headers.length - 2}` : '';
+  return `${headerList}${extra} Header`;
+}
+
 export function buildFindingTitle(
   params: AnalyzedReflectedParameter[],
   hasLiteral: boolean
@@ -478,9 +508,14 @@ export function buildFindingTitle(
   const display = confirmed.length ? confirmed : sorted;
   const names = display.slice(0, 2).map(p => `"${p.name}"`);
   const contexts = [
-    ...new Set(display.slice(0, 2).map(p => prettyPrintContext(p.context) ?? p.context))
+    ...new Set(display.slice(0, 2).map(p => headerContextLabel(p)))
   ];
 
+  const vuln = display.slice(0, 2)
+    .map(p => headerVulnLabel(p))
+    .find(v => v !== undefined);
+
   const prefix = hasLiteral ? "Reflected" : "Encoded reflections";
-  return `${prefix}: (${tierLabel(topTier)}) ${names.join(", ")} in ${contexts.join(", ")}`;
+  const suffix = vuln ? ` — ${vuln}` : '';
+  return `${prefix}: (${tierLabel(topTier)}) ${names.join(", ")} in ${contexts.join(", ")}${suffix}`;
 }

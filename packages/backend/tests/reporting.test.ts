@@ -280,6 +280,65 @@ describe("buildFindingTitle", () => {
       expect(title).toContain(label);
     }
   });
+
+  test("header reflection includes header name", () => {
+    const title = buildFindingTitle([{
+      name: "redir", matches: [[0, 1]], context: "Response Header",
+      severity: "medium", confirmed: true, source: "URL",
+      headers: ["X-Custom"]
+    }], true);
+    expect(title).toBe('Reflected: (Medium) "redir" in X-Custom Header');
+  });
+
+  test("location header with open redirect position", () => {
+    const title = buildFindingTitle([{
+      name: "url", matches: [[0, 1]], context: "Response Header",
+      severity: "high", confirmed: true, source: "URL",
+      headers: ["Location"], redirectPosition: "full-url"
+    }], true);
+    expect(title).toBe(
+      'Reflected: (High) "url" in Location Header — Open Redirect'
+    );
+  });
+
+  test("location header with path position has no vuln label", () => {
+    const title = buildFindingTitle([{
+      name: "next", matches: [[0, 1]], context: "Response Header",
+      severity: "medium", confirmed: true, source: "URL",
+      headers: ["Location"], redirectPosition: "path"
+    }], true);
+    expect(title).toBe('Reflected: (Medium) "next" in Location Header');
+  });
+
+  test("set-cookie header shows cookie injection", () => {
+    const title = buildFindingTitle([{
+      name: "lang", matches: [[0, 1]], context: "Response Header",
+      severity: "high", confirmed: true, source: "URL",
+      headers: ["Set-Cookie"]
+    }], true);
+    expect(title).toBe(
+      'Reflected: (High) "lang" in Set-Cookie Header — Cookie Injection'
+    );
+  });
+
+  test("csp header shows CSP injection", () => {
+    const title = buildFindingTitle([{
+      name: "src", matches: [[0, 1]], context: "Response Header",
+      severity: "high", confirmed: true, source: "URL",
+      headers: ["Content-Security-Policy"]
+    }], true);
+    expect(title).toContain("Content-Security-Policy Header");
+    expect(title).toContain("CSP Injection");
+  });
+
+  test("multiple header names shown", () => {
+    const title = buildFindingTitle([{
+      name: "val", matches: [[0, 1]], context: "Response Header",
+      severity: "medium", confirmed: true, source: "URL",
+      headers: ["X-Foo", "X-Bar"]
+    }], true);
+    expect(title).toContain("X-Foo, X-Bar Header");
+  });
 });
 
 describe("generateReport — new contexts", () => {
