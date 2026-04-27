@@ -1012,7 +1012,10 @@ const ResponseBodyPayloadGenerator = class {
 			}
 		}
 		const _jsChars = new Set(["<", ">", "/", ";", "'", '"', "`", "(", ")", "{", "}", "*"]);
-		if (ctx.context.includes("jsInQuote") && _jsChars.has(payload)) {
+		const alreadyHasJsInQuote = out.some(
+			(r) => r.context === "jsInQuote" || r.context === "jsInQuoteEscaped"
+		);
+		if (!alreadyHasJsInQuote && ctx.context.includes("jsInQuote") && _jsChars.has(payload)) {
 			if (this._isPayloadInSpecifiedContext("script", marker, true)) {
 				out.push({ char: payload, context: "jsInQuote" });
 			}
