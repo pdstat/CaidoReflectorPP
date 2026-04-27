@@ -482,5 +482,5 @@ export function buildFindingTitle(
   ];
 
   const prefix = hasLiteral ? "Reflected" : "Encoded reflections";
-  return `${prefix}: ${names.join(", ")} in ${contexts.join(", ")} (${tierLabel(topTier)})`;
+  return `${prefix}: (${tierLabel(topTier)}) ${names.join(", ")} in ${contexts.join(", ")}`;
 }

@@ -234,7 +234,7 @@ describe("buildFindingTitle", () => {
       name: "q", matches: [[0, 1]], context: "jsInQuote",
       severity: "critical", confirmed: true, source: "URL"
     }], true);
-    expect(title).toBe('Reflected: "q" in Script String (Critical)');
+    expect(title).toBe('Reflected: (Critical) "q" in Script String');
   });
 
   test("multiple params sorted by severity, max 2 names", () => {
