@@ -150,6 +150,40 @@ describe("checkHeaderReflections", () => {
     expectHeaderFinding(out[0], "q", ["X-Ref-CS"]);
   });
 
+  test("infrastructure headers (X-Cache-Key, X-Nextjs-Rewritten-Path) are skipped entirely", async () => {
+    const req = makeRequest({ query: "q=myvalue123" });
+    const response = makeResponse({
+      "X-Cache-Key": "example/path?q=myvalue123",
+      "X-Nextjs-Rewritten-Path": "/_sites/example/myvalue123"
+    });
+    const sdk = makeSdk({ reflectQuery: ["X-Cache-Key", "X-Nextjs-Rewritten-Path"] });
+    const out = await checkHeaderReflections(req as any, response as any, sdk);
+    expect(out.length).toBe(0);
+  });
+
+  test("security-relevant headers (Location, Set-Cookie) are still checked", async () => {
+    const req = makeRequest({ query: "q=mytoken123" });
+    const response = makeResponse({
+      "Location": "https://example.com/?q=mytoken123"
+    });
+    const sdk = makeSdk({ reflectQuery: ["Location"] });
+    const out = await checkHeaderReflections(req as any, response as any, sdk);
+    expect(out.length).toBe(1);
+    expect(out[0].headers).toEqual(["Location"]);
+  });
+
+  test("mixed infra + security headers only reports the security-relevant one", async () => {
+    const req = makeRequest({ query: "redir=mytoken123" });
+    const response = makeResponse({
+      "X-Cache-Key": "example/path?redir=mytoken123",
+      "Location": "https://example.com/?redir=mytoken123"
+    });
+    const sdk = makeSdk({ reflectQuery: ["Location"] });
+    const out = await checkHeaderReflections(req as any, response as any, sdk);
+    expect(out.length).toBe(1);
+    expect(out[0].headers).toEqual(["Location"]);
+  });
+
   test("confirmation succeeds when server preserves exact CANARY casing", async () => {
     const req = makeRequest({ query: "p=KeepCase" });
     const sdk = {

@@ -31,7 +31,10 @@ const COMMON_PATH_SEGMENTS = new Set([
   'pages', 'user', 'users', 'auth', 'test', 'docs',
   'help', 'blog', 'post', 'posts', 'tags', 'tag',
   'categories', 'category', 'search', 'about', 'contact',
-  'null', 'true', 'false', 'undefined'
+  'null', 'true', 'false', 'undefined',
+  'next', 'react', 'vue', 'angular', 'svelte', 'node',
+  'modules', 'components', 'views', 'layout', 'layouts',
+  'config', 'settings', 'overview', 'guide', 'getting-started',
 ]);
 
 // Unified parameter enumeration (URL query, Cookie, body, request headers, path segments)

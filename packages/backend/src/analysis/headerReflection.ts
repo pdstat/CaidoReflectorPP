@@ -7,6 +7,37 @@ import { detectRedirectPosition } from "./redirectAnalysis.js";
 
 type ReflectedParameter = AnalyzedReflectedParameter;
 
+const SKIP_RESPONSE_HEADERS = new Set([
+  'x-cache-key',
+  'x-vercel-cache-key',
+  'x-nextjs-rewritten-path',
+  'x-nextjs-page',
+  'x-nextjs-prerender',
+  'x-nextjs-stale-time',
+  'x-matched-path',
+  'x-invoke-path',
+  'x-original-url',
+  'x-rewrite-url',
+  'x-request-url',
+  'content-location',
+  'x-request-id',
+  'x-trace-id',
+  'x-correlation-id',
+  'x-amzn-requestid',
+  'x-amzn-trace-id',
+  'x-vercel-id',
+  'x-powered-by',
+  'server',
+  'date',
+  'etag',
+  'x-cache',
+  'x-cache-status',
+  'x-served-by',
+  'cf-ray',
+  'cf-cache-status',
+  'x-runtime',
+]);
+
 export async function confirmHeaderReflection(
   originalRequest: any,
   param: RequestParameter,
@@ -74,7 +105,10 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
     if (!param.value) continue;
     const needle = param.value.toLowerCase();
     const potential: string[] = [];
-    for (const [name, joined] of hdrsJoinedLower.entries()) if (joined.includes(needle)) potential.push(name);
+    for (const [name, joined] of hdrsJoinedLower.entries()) {
+      if (SKIP_RESPONSE_HEADERS.has(name.toLowerCase())) continue;
+      if (joined.includes(needle)) potential.push(name);
+    }
     if (potential.length === 0) continue;
     const { confirmed: confirmedHeaders, allowedChars, crlf } = await confirmHeaderReflection(request, param, potential, sdk);
     if (confirmedHeaders.length > 0) {
