@@ -166,6 +166,30 @@ describe('query utilities', () => {
       expect(parsed.user.name).toBe('INJECTED');
     });
 
+    test('BodyJson mutation handles + as space in form-encoded JSON', () => {
+      const json = '{"asin":"hello world","tag":"keep"}';
+      const encoded = encodeURIComponent(json).replace(/%20/g, '+');
+      const body = `data=${encoded}`;
+      const spec = {
+        _body: body,
+        getBody() { return { toText: () => this._body }; },
+        setBody(v: string) { this._body = v; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '',
+        setQuery: (_: string) => {},
+      } as any;
+      const param: RequestParameter = {
+        key: 'data.asin', value: 'hello world', source: 'BodyJson',
+        method: 'POST', code: 200,
+        parentKey: 'data', jsonPath: ['asin']
+      };
+      mutateParamValue(spec, param, 'INJECTED', sdk());
+      const dataVal = decodeURIComponent(spec._body.split('=')[1]);
+      const parsed = JSON.parse(dataVal);
+      expect(parsed.asin).toBe('INJECTED');
+      expect(parsed.tag).toBe('keep');
+    });
+
     test('updates Cookie value when present', () => {
       const spec = {
         _cookie: 'sid=abc123; theme=light',

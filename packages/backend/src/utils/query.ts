@@ -56,7 +56,8 @@ export const mutateParamValue = (
         try { key = decodeURIComponent(pair.slice(0, eq)); } catch { rebuilt.push(pair); continue; }
         if (key === param.parentKey && !mutated) {
           let decoded: string;
-          try { decoded = decodeURIComponent(pair.slice(eq + 1)); } catch { rebuilt.push(pair); continue; }
+          const rawVal = pair.slice(eq + 1).replace(/\+/g, ' ');
+          try { decoded = decodeURIComponent(rawVal); } catch { rebuilt.push(pair); continue; }
           try {
             const json = JSON.parse(decoded);
             let target = json;
@@ -92,7 +93,8 @@ export const mutateParamValue = (
         try { key = decodeURIComponent(pair.slice(0, eq)); } catch { rebuilt.push(pair); continue; }
         if (key === param.parentKey && !mutated) {
           let decoded: string;
-          try { decoded = decodeURIComponent(pair.slice(eq + 1)); } catch { rebuilt.push(pair); continue; }
+          const rawVal = pair.slice(eq + 1).replace(/\+/g, ' ');
+          try { decoded = decodeURIComponent(rawVal); } catch { rebuilt.push(pair); continue; }
           try {
             const json = JSON.parse(decoded);
             let target = json;

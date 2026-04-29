@@ -165,6 +165,18 @@ describe('enumerateRequestParameters', () => {
     expect(jsonParams.length).toBe(0);
   });
 
+  test('decodes + as space in form-encoded JSON values', () => {
+    const sdk = makeSdk();
+    const json = '{"asin":"hello world","tag":"no spaces here"}';
+    const encoded = encodeURIComponent(json).replace(/%20/g, '+');
+    const body = `data=${encoded}`;
+    const spec = uniqueSpec({ body, contentType: 'application/x-www-form-urlencoded' });
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const jsonParams = out.filter(p => p.source === 'BodyJson');
+    expect(jsonParams.find(p => p.key === 'data.asin')?.value).toBe('hello world');
+    expect(jsonParams.find(p => p.key === 'data.tag')?.value).toBe('no spaces here');
+  });
+
   test('cookie parsing trims key whitespace', () => {
     const sdk = makeSdk();
     const spec = makeSpec({ cookies: '  token =abc ; x=1' });

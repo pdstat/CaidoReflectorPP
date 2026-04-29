@@ -61,7 +61,7 @@ function extractJsonStringValues(
 ): JsonSubParam[] {
   let decoded: string;
   try {
-    decoded = decodeURIComponent(rawValue);
+    decoded = decodeURIComponent(rawValue.replace(/\+/g, ' '));
   } catch {
     return [];
   }
