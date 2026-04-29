@@ -44,6 +44,77 @@ export const mutateParamValue = (
       }
       return;
     }
+    if (param.source === 'UrlJson' && param.parentKey && param.jsonPath?.length) {
+      const rawQuery = requestSpec.getQuery() || '';
+      const pairs = rawQuery.split('&');
+      const rebuilt: string[] = [];
+      let mutated = false;
+      for (const pair of pairs) {
+        const eq = pair.indexOf('=');
+        if (eq === -1) { rebuilt.push(pair); continue; }
+        let key: string;
+        try { key = decodeURIComponent(pair.slice(0, eq)); } catch { rebuilt.push(pair); continue; }
+        if (key === param.parentKey && !mutated) {
+          let decoded: string;
+          try { decoded = decodeURIComponent(pair.slice(eq + 1)); } catch { rebuilt.push(pair); continue; }
+          try {
+            const json = JSON.parse(decoded);
+            let target = json;
+            for (let i = 0; i < param.jsonPath.length - 1; i++) {
+              const seg = param.jsonPath[i];
+              target = target[/^\d+$/.test(seg) ? parseInt(seg, 10) : seg];
+              if (target == null) throw new Error('path not found');
+            }
+            const last = param.jsonPath[param.jsonPath.length - 1];
+            target[/^\d+$/.test(last) ? parseInt(last, 10) : last] = newValue;
+            rebuilt.push(
+              `${pair.slice(0, eq)}=${encodeURIComponent(JSON.stringify(json))}`
+            );
+            mutated = true;
+          } catch { rebuilt.push(pair); }
+        } else {
+          rebuilt.push(pair);
+        }
+      }
+      if (mutated) requestSpec.setQuery(rebuilt.join('&'));
+      return;
+    }
+    if (param.source === 'BodyJson' && param.parentKey && param.jsonPath?.length) {
+      const bodyText = requestSpec.getBody()?.toText();
+      if (!bodyText) return;
+      const pairs = bodyText.split('&');
+      const rebuilt: string[] = [];
+      let mutated = false;
+      for (const pair of pairs) {
+        const eq = pair.indexOf('=');
+        if (eq === -1) { rebuilt.push(pair); continue; }
+        let key: string;
+        try { key = decodeURIComponent(pair.slice(0, eq)); } catch { rebuilt.push(pair); continue; }
+        if (key === param.parentKey && !mutated) {
+          let decoded: string;
+          try { decoded = decodeURIComponent(pair.slice(eq + 1)); } catch { rebuilt.push(pair); continue; }
+          try {
+            const json = JSON.parse(decoded);
+            let target = json;
+            for (let i = 0; i < param.jsonPath.length - 1; i++) {
+              const seg = param.jsonPath[i];
+              target = target[/^\d+$/.test(seg) ? parseInt(seg, 10) : seg];
+              if (target == null) throw new Error('path not found');
+            }
+            const last = param.jsonPath[param.jsonPath.length - 1];
+            target[/^\d+$/.test(last) ? parseInt(last, 10) : last] = newValue;
+            rebuilt.push(
+              `${pair.slice(0, eq)}=${encodeURIComponent(JSON.stringify(json))}`
+            );
+            mutated = true;
+          } catch { rebuilt.push(pair); }
+        } else {
+          rebuilt.push(pair);
+        }
+      }
+      if (mutated) requestSpec.setBody(rebuilt.join('&'));
+      return;
+    }
     if (param.source === 'Body' && requestSpec.getBody()) {
       const bodyText = requestSpec.getBody()?.toText();
       if (!bodyText) return;

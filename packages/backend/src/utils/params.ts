@@ -21,6 +21,10 @@ const SKIP_REQUEST_HEADERS = new Set([
 
 const MIN_HEADER_VALUE_LEN = 6;
 
+const MIN_JSON_STRING_LEN = 4;
+const MAX_JSON_PARAMS = 20;
+const MAX_JSON_DEPTH = 5;
+
 const MIN_PATH_SEGMENT_LEN = 4;
 
 const COMMON_PATH_SEGMENTS = new Set([
@@ -36,6 +40,71 @@ const COMMON_PATH_SEGMENTS = new Set([
   'modules', 'components', 'views', 'layout', 'layouts',
   'config', 'settings', 'overview', 'guide', 'getting-started',
 ]);
+
+interface JsonSubParam {
+  key: string;
+  value: string;
+  parentKey: string;
+  jsonPath: string[];
+}
+
+function buildJsonPathDisplay(path: string[]): string {
+  return path.reduce((acc, p) => {
+    if (/^\d+$/.test(p)) return `${acc}[${p}]`;
+    return acc ? `${acc}.${p}` : p;
+  }, '');
+}
+
+function extractJsonStringValues(
+  parentKey: string,
+  rawValue: string
+): JsonSubParam[] {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(rawValue);
+  } catch {
+    return [];
+  }
+  const first = decoded.trimStart()[0];
+  if (first !== '{' && first !== '[') return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decoded);
+  } catch {
+    return [];
+  }
+  if (typeof parsed !== 'object' || parsed === null) return [];
+  const results: JsonSubParam[] = [];
+  function walk(obj: unknown, path: string[], depth: number) {
+    if (depth > MAX_JSON_DEPTH) return;
+    if (results.length >= MAX_JSON_PARAMS) return;
+    if (typeof obj === 'string') {
+      if (obj.length >= MIN_JSON_STRING_LEN) {
+        const display = buildJsonPathDisplay(path);
+        results.push({
+          key: `${parentKey}.${display}`,
+          value: obj,
+          parentKey,
+          jsonPath: [...path]
+        });
+      }
+      return;
+    }
+    if (Array.isArray(obj)) {
+      for (let i = 0; i < obj.length; i++) {
+        walk(obj[i], [...path, String(i)], depth + 1);
+      }
+      return;
+    }
+    if (typeof obj === 'object' && obj !== null) {
+      for (const [k, v] of Object.entries(obj)) {
+        walk(v, [...path, k], depth + 1);
+      }
+    }
+  }
+  walk(parsed, [], 0);
+  return results;
+}
 
 // Unified parameter enumeration (URL query, Cookie, body, request headers, path segments)
 // Set track=false to avoid paramStore mutations (e.g., header-only scans)
@@ -63,6 +132,23 @@ export function enumerateRequestParameters(requestOrSpec: any, sdk: any, respons
       if (!pair) continue; const eq = pair.indexOf('='); if (eq === -1) continue;
       const key = pair.slice(0, eq); const value = pair.slice(eq + 1);
       push({ key, value, source: 'URL', method, code: respCode });
+
+      const jsonSubs = extractJsonStringValues(key, value);
+      for (const sub of jsonSubs) {
+        const candidate: TrackedParam = {
+          key: sub.key, value: sub.value,
+          source: 'UrlJson', method, code: respCode
+        };
+        if (track) {
+          if (!candidate.key || store.paramTested(endpoint, candidate)) continue;
+          store.addParam(endpoint, candidate);
+        }
+        params.push({
+          key: sub.key, value: sub.value, source: 'UrlJson',
+          method, code: respCode,
+          parentKey: sub.parentKey, jsonPath: sub.jsonPath
+        });
+      }
     }
   }
 
@@ -84,6 +170,23 @@ export function enumerateRequestParameters(requestOrSpec: any, sdk: any, respons
         if (!pair) continue; const eq = pair.indexOf('='); if (eq === -1) continue;
         const key = pair.slice(0, eq).trim(); const value = pair.slice(eq + 1);
         push({ key, value, source: 'Body', method, code: respCode });
+
+        const jsonSubs = extractJsonStringValues(key, value);
+        for (const sub of jsonSubs) {
+          const candidate: TrackedParam = {
+            key: sub.key, value: sub.value,
+            source: 'BodyJson', method, code: respCode
+          };
+          if (track) {
+            if (!candidate.key || store.paramTested(endpoint, candidate)) continue;
+            store.addParam(endpoint, candidate);
+          }
+          params.push({
+            key: sub.key, value: sub.value, source: 'BodyJson',
+            method, code: respCode,
+            parentKey: sub.parentKey, jsonPath: sub.jsonPath
+          });
+        }
       }
     }
   }

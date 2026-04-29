@@ -95,6 +95,77 @@ describe('query utilities', () => {
       expect(spec._body).toBe('a=1&b=999');
     });
 
+    test('updates BodyJson value within JSON in form body', () => {
+      const json = JSON.stringify({ items: [{ id: "orig", name: "test" }] });
+      const body = `other=keep&data=${encodeURIComponent(json)}`;
+      const spec = {
+        _body: body,
+        getBody() { return { toText: () => this._body }; },
+        setBody(v: string) { this._body = v; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '',
+        setQuery: (_: string) => {},
+      } as any;
+      const param: RequestParameter = {
+        key: 'data.items[0].id', value: 'orig', source: 'BodyJson',
+        method: 'POST', code: 200,
+        parentKey: 'data', jsonPath: ['items', '0', 'id']
+      };
+      mutateParamValue(spec, param, 'INJECTED', sdk());
+      const pairs = spec._body.split('&');
+      expect(pairs[0]).toBe('other=keep');
+      const dataVal = decodeURIComponent(pairs[1].split('=')[1]);
+      const parsed = JSON.parse(dataVal);
+      expect(parsed.items[0].id).toBe('INJECTED');
+      expect(parsed.items[0].name).toBe('test');
+    });
+
+    test('BodyJson mutation preserves other form params exactly', () => {
+      const json = JSON.stringify({ val: "original" });
+      const body = `token=abc%3D%3D&data=${encodeURIComponent(json)}&extra=x%26y`;
+      const spec = {
+        _body: body,
+        getBody() { return { toText: () => this._body }; },
+        setBody(v: string) { this._body = v; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '',
+        setQuery: (_: string) => {},
+      } as any;
+      const param: RequestParameter = {
+        key: 'data.val', value: 'original', source: 'BodyJson',
+        method: 'POST', code: 200,
+        parentKey: 'data', jsonPath: ['val']
+      };
+      mutateParamValue(spec, param, 'NEW', sdk());
+      const parts = spec._body.split('&');
+      expect(parts[0]).toBe('token=abc%3D%3D');
+      expect(parts[2]).toBe('extra=x%26y');
+    });
+
+    test('updates UrlJson value within JSON in query string', () => {
+      const json = JSON.stringify({ user: { name: "orig" } });
+      const query = `other=keep&config=${encodeURIComponent(json)}`;
+      const spec = {
+        _query: query,
+        getQuery() { return this._query; },
+        setQuery(q: string) { this._query = q; },
+        getBody: () => undefined,
+        setBody: (_: string) => {},
+        getHeader: (_: string) => undefined,
+      } as any;
+      const param: RequestParameter = {
+        key: 'config.user.name', value: 'orig', source: 'UrlJson',
+        method: 'GET', code: 200,
+        parentKey: 'config', jsonPath: ['user', 'name']
+      };
+      mutateParamValue(spec, param, 'INJECTED', sdk());
+      const pairs = spec._query.split('&');
+      expect(pairs[0]).toBe('other=keep');
+      const configVal = decodeURIComponent(pairs[1].split('=')[1]);
+      const parsed = JSON.parse(configVal);
+      expect(parsed.user.name).toBe('INJECTED');
+    });
+
     test('updates Cookie value when present', () => {
       const spec = {
         _cookie: 'sid=abc123; theme=light',

@@ -116,6 +116,55 @@ describe('enumerateRequestParameters', () => {
     expect(out.map(p => p.key).sort()).toEqual(['a','b']);
   });
 
+  test('extracts JSON string values from form body params', () => {
+    const sdk = makeSdk();
+    const json = JSON.stringify({
+      items: [{ id: "abc123", name: "test-item" }],
+      label: "my-label"
+    });
+    const body = `other=val&data=${encodeURIComponent(json)}`;
+    const spec = uniqueSpec({ body, contentType: 'application/x-www-form-urlencoded' });
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const jsonParams = out.filter(p => p.source === 'BodyJson');
+    expect(jsonParams.length).toBe(3);
+    expect(jsonParams.find(p => p.key === 'data.items[0].id')?.value).toBe('abc123');
+    expect(jsonParams.find(p => p.key === 'data.items[0].name')?.value).toBe('test-item');
+    expect(jsonParams.find(p => p.key === 'data.label')?.value).toBe('my-label');
+    expect(jsonParams.every(p => p.parentKey === 'data')).toBe(true);
+  });
+
+  test('skips short JSON string values', () => {
+    const sdk = makeSdk();
+    const json = JSON.stringify({ a: "hi", b: "long-enough" });
+    const body = `d=${encodeURIComponent(json)}`;
+    const spec = uniqueSpec({ body, contentType: 'application/x-www-form-urlencoded' });
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const jsonParams = out.filter(p => p.source === 'BodyJson');
+    expect(jsonParams.length).toBe(1);
+    expect(jsonParams[0].key).toBe('d.b');
+  });
+
+  test('extracts JSON string values from URL query params', () => {
+    const sdk = makeSdk();
+    const json = JSON.stringify({ user: { name: "alice-test" }, tag: "info" });
+    const spec = uniqueSpec({ query: `config=${encodeURIComponent(json)}&other=val` });
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const jsonParams = out.filter(p => p.source === 'UrlJson');
+    expect(jsonParams.length).toBe(2);
+    expect(jsonParams.find(p => p.key === 'config.user.name')?.value).toBe('alice-test');
+    expect(jsonParams.find(p => p.key === 'config.tag')?.value).toBe('info');
+    expect(jsonParams.every(p => p.parentKey === 'config')).toBe(true);
+  });
+
+  test('does not extract JSON from non-JSON form values', () => {
+    const sdk = makeSdk();
+    const body = 'a=plain-text&b=123';
+    const spec = uniqueSpec({ body, contentType: 'application/x-www-form-urlencoded' });
+    const out = enumerateRequestParameters(spec, sdk, 200, false);
+    const jsonParams = out.filter(p => p.source === 'BodyJson');
+    expect(jsonParams.length).toBe(0);
+  });
+
   test('cookie parsing trims key whitespace', () => {
     const sdk = makeSdk();
     const spec = makeSpec({ cookies: '  token =abc ; x=1' });

@@ -1,4 +1,4 @@
-export type ParamSource = "URL" | "Cookie" | "Body" | "Header" | "Path";
+export type ParamSource = "URL" | "UrlJson" | "Cookie" | "Body" | "BodyJson" | "Header" | "Path";
 
 export type SeverityTier = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -33,4 +33,6 @@ export interface RequestParameter {
   source: ParamSource;
   method: string;
   code: number;
+  parentKey?: string;
+  jsonPath?: string[];
 }

@@ -44,7 +44,8 @@ export async function runProbes(
     for (let i = 0; i < contextInfo.payload.length; i += BATCH) {
         const batch = contextInfo.payload.slice(i, i + BATCH);
         const markers = batch.map((ch: string) => ({ ch, pre: randomValue(5), suf: randomValue(5) }));
-        const injected = markers.map((m: { ch: string; pre: string; suf: string }) => m.pre + encodeURIComponent(m.ch) + m.suf).join("");
+        const skipEncode = param.source === 'BodyJson' || param.source === 'UrlJson';
+        const injected = markers.map((m: { ch: string; pre: string; suf: string }) => m.pre + (skipEncode ? m.ch : encodeURIComponent(m.ch)) + m.suf).join("");
         const probeSpec: any = request.toSpec();
         mutateParamValue(probeSpec, param, injected, sdk as any);
         sdk.console.log(`[Reflector++] Probing ${param.key} with batch [${batch.join(', ')}]`);
@@ -103,7 +104,7 @@ export async function runProbes(
             const combo = '\\' + enclosingQuote;
             const pre = randomValue(5);
             const suf = randomValue(5);
-            const injected = pre + encodeURIComponent(combo) + suf;
+            const injected = pre + (param.source === 'BodyJson' || param.source === 'UrlJson' ? combo : encodeURIComponent(combo)) + suf;
             const probeSpec: any = request.toSpec();
             mutateParamValue(probeSpec, param, injected, sdk as any);
             sdk.console.log(
