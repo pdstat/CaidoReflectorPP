@@ -131,13 +131,15 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
         }
       }
 
+      const allowCredentials = (hdrsJoinedLower.get('access-control-allow-credentials') ?? '').includes('true');
       const severity = classifySeverity({
         confirmed: true,
         allowedChars,
         context: contextLabel,
         header: !crlf,
         headerNames: confirmedHeaders,
-        redirectPosition
+        redirectPosition,
+        allowCredentials
       });
       confirmed.push({
         name: param.key,

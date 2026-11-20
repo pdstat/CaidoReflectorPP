@@ -11,6 +11,7 @@ export interface SeverityInputs {
   header?: boolean;
   headerNames?: string[];
   redirectPosition?: RedirectPosition;
+  allowCredentials?: boolean;
 }
 
 const SCRIPT_CONTEXTS = new Set<string>([
@@ -165,6 +166,13 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
         && hasCookieInjectionChars(chars)) return 'high';
     if (names.has('content-security-policy')
         && hasCSPBypassChars(chars)) return 'high';
+    // A reflected Access-Control-Allow-Origin lets an attacker-chosen origin read the
+    // response (CORS misconfiguration); combined with Allow-Credentials: true it exposes
+    // authenticated data -> critical. The reflection itself is the vulnerability, so no
+    // breakout char is required.
+    if (names.has('access-control-allow-origin')) {
+      return inp.allowCredentials ? 'critical' : 'high';
+    }
   }
 
   // Medium tier

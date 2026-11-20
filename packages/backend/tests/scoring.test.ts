@@ -366,12 +366,21 @@ describe("classifySeverity", () => {
     })).toBe('medium');
   });
 
-  test("confirmed CORS header (other header) is medium", () => {
+  test("confirmed reflected ACAO (no credentials) is high", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: [],
       context: 'Response Header', header: true,
       headerNames: ['Access-Control-Allow-Origin']
-    })).toBe('medium');
+    })).toBe('high');
+  });
+
+  test("confirmed reflected ACAO with Allow-Credentials:true is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [],
+      context: 'Response Header', header: true,
+      headerNames: ['Access-Control-Allow-Origin'],
+      allowCredentials: true
+    })).toBe('critical');
   });
 
   test("confirmed custom header is medium", () => {
