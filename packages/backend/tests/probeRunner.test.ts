@@ -462,6 +462,38 @@ describe("runProbes()", () => {
     expect(result.successfulChars.has('"')).toBe(true);
     expect(result.successfulChars.has('/')).toBe(true);
   });
+
+  test("Path source: breakout char injected raw (no double-encode) is detected", async () => {
+    // Regression for the Path double-encode bug: probeRunner must inject the char RAW and let
+    // mutateParamValue apply the single path encodeURIComponent. The server (Express) then decodes
+    // once, so the char reflects raw. Before the fix the char was encoded twice (%253C) and never
+    // reflected raw, silently downgrading severity.
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + ch + suf) ? [{ context: 'html', char: ch }] : []
+    );
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const sdk = buildSdk(async (spec: any) => {
+      // Simulate Express decoding the path segment exactly once.
+      const seg = spec.getPath().split('/').pop() as string;
+      const decodedOnce = decodeURIComponent(seg);
+      return { response: buildResponse(baselineBody + decodedOnce) };
+    });
+    const result = await runProbes(
+      sdk,
+      { toSpec: () => buildPathRequestSpec("/seg0/seg1") },
+      { key: "path:1:seg1", source: "Path", value: "seg1" },
+      { context: ["html"], payload: ["<"] },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "html"
+    );
+    expect(result.confirmed).toBe(true);
+    expect(result.successfulChars.has('<')).toBe(true);
+  });
 });
 
 describe("orderPayloadBreakoutFirst()", () => {
