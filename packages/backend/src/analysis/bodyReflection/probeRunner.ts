@@ -23,6 +23,27 @@ export interface CountProbeResult {
     code: number;
 }
 
+// String-terminating characters, in priority order. An error-gated reflection
+// (input echoed only inside a server error message — e.g. a MariaDB syntax error —
+// triggered by a quote) truncates the response to the text AFTER the breaking char,
+// so any character probed before it in the shared batch blob is invisible. Probing
+// these terminators first means whichever one actually breaks the statement fires the
+// error as early as possible, leaving the higher-severity chars (<, >) in the surviving
+// window. For a normal reflection the whole blob echoes regardless of order, so this is
+// a no-op there.
+const BREAKOUT_FIRST = ["\\", "'", '"', "`"];
+
+export function orderPayloadBreakoutFirst(payload: string[]): string[] {
+    return [...payload].sort((a, b) => {
+        const ia = BREAKOUT_FIRST.indexOf(a);
+        const ib = BREAKOUT_FIRST.indexOf(b);
+        if (ia === ib) return 0; // both absent (-1) or same char: preserve order (stable)
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+    });
+}
+
 export async function runProbes(
     sdk: SDK,
     request: any,
@@ -40,9 +61,10 @@ export async function runProbes(
     if (!contextInfo || !Array.isArray(contextInfo.payload) || contextInfo.payload.length === 0) {
         return { confirmed: false, reflected: false, successfulChars, bestContext, probeWasStable };
     }
+    const orderedPayload = orderPayloadBreakoutFirst(contextInfo.payload);
     const BATCH = 8;
-    for (let i = 0; i < contextInfo.payload.length; i += BATCH) {
-        const batch = contextInfo.payload.slice(i, i + BATCH);
+    for (let i = 0; i < orderedPayload.length; i += BATCH) {
+        const batch = orderedPayload.slice(i, i + BATCH);
         const markers = batch.map((ch: string) => ({ ch, pre: randomValue(5), suf: randomValue(5) }));
         const skipEncode = param.source === 'BodyJson' || param.source === 'UrlJson';
         const injected = markers.map((m: { ch: string; pre: string; suf: string }) => m.pre + (skipEncode ? m.ch : encodeURIComponent(m.ch)) + m.suf).join("");

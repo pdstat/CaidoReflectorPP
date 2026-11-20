@@ -119,7 +119,7 @@ function generateAssessment(
     return "Early HTML reflection before relative URLs";
   }
   if (canonical === CONTEXT.HTML) {
-    if (hasLt) return "Tag injection possible";
+    if (hasLt) return "Tag injection — reflected XSS or dangling-markup exfiltration";
     return "HTML reflection, no tag injection chars";
   }
   if (canonical === CONTEXT.HTML_COMMENT) {

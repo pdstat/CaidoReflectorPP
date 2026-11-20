@@ -1,4 +1,4 @@
-import { runProbes, runCountProbe } from "../src/analysis/bodyReflection/probeRunner.js";
+import { runProbes, runCountProbe, orderPayloadBreakoutFirst } from "../src/analysis/bodyReflection/probeRunner.js";
 import { findMatches } from "../src/utils/text.js";
 import { ConfigStore } from "../src/stores/configStore.js";
 
@@ -417,6 +417,67 @@ describe("runProbes()", () => {
     expect(result.bestContext).toBe("jsonString");
     expect(jsonDetectImpl).toHaveBeenCalled();
     expect(mockDetectImpl).not.toHaveBeenCalled();
+  });
+
+  test("Error-gated reflection: tag chars detected when a quote truncates the echo", async () => {
+    // Models an endpoint that echoes input ONLY inside a MariaDB syntax error, and only
+    // when the value contains a "'" (otherwise a non-reflecting page is returned). The
+    // error reflects just the text AFTER the breaking quote ("...near '<rest>'"), so any
+    // char probed before the quote in the shared blob is invisible. The HTML payload list
+    // places "'" before "<"/">", which hid tag injection until breakout chars were probed
+    // first. Mirrors westernunionshop.com/_JSCRIPTS/productsearch.php?qs=.
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + ch + suf) ? [{ context: 'html', char: ch }] : []
+    );
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const sdk = buildSdk(async (spec: any) => {
+      const q: string = spec.getQuery();
+      const decoded = decodeURIComponent(q.slice(q.indexOf('=') + 1));
+      const qi = decoded.indexOf("'");
+      // No quote => no SQL error => non-reflecting page.
+      const echoed = qi === -1 ? '' : decoded.slice(qi + 1);
+      return { response: buildResponse(`err near '${echoed}'`) };
+    });
+
+    // HTML text payload set exactly as generated for this context.
+    const htmlPayload = ['<', '>', '"', "'", '/', ';', ''];
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(buildRequestSpec("qs=init")),
+      { key: "qs", source: "URL", value: "money'" },
+      { context: ["html"], payload: htmlPayload },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "html"
+    );
+    expect(result.confirmed).toBe(true);
+    // The security-relevant outcome: tag injection chars are now detected.
+    expect(result.successfulChars.has('<')).toBe(true);
+    expect(result.successfulChars.has('>')).toBe(true);
+    // Chars after the breaking quote also surface.
+    expect(result.successfulChars.has('"')).toBe(true);
+    expect(result.successfulChars.has('/')).toBe(true);
+  });
+});
+
+describe("orderPayloadBreakoutFirst()", () => {
+  test("moves string terminators to the front in priority order, stably", () => {
+    expect(orderPayloadBreakoutFirst(['<', '>', '"', "'", '/', ';', '']))
+      .toEqual(["'", '"', '<', '>', '/', ';', '']);
+  });
+
+  test("backslash and backtick outrank quotes; non-terminators keep order", () => {
+    expect(orderPayloadBreakoutFirst([';', '`', '<', "'", '\\', '>']))
+      .toEqual(['\\', "'", '`', ';', '<', '>']);
+  });
+
+  test("no terminators present is a no-op", () => {
+    expect(orderPayloadBreakoutFirst(['<', '>', '/', ';']))
+      .toEqual(['<', '>', '/', ';']);
   });
 });
 
