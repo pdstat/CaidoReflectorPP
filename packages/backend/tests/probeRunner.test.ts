@@ -463,6 +463,35 @@ describe("runProbes()", () => {
     expect(result.successfulChars.has('/')).toBe(true);
   });
 
+  test("confirmed is demoted when no exploitable char survives in a breakout-required context", async () => {
+    // Escaped-endpoint pattern: the probe char reflects but only in an escaped/non-literal
+    // context (no successful breakout char). In an attribute/HTML context that is not a real
+    // finding, so confirmed must be demoted to false.
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + encodeURIComponent(ch) + suf)
+        ? [{ context: 'attributeEscaped', char: ch }] : []
+    );
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const needle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + needle('"')) }));
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["attributeInQuote"], payload: ['"'] },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      'Tag Attribute (") Value'
+    );
+    expect(result.reflected).toBe(true);        // the char did reflect
+    expect(result.successfulChars.size).toBe(0); // but no literal breakout
+    expect(result.confirmed).toBe(false);        // so NOT a confirmed finding
+  });
+
   test("Path source: breakout char injected raw (no double-encode) is detected", async () => {
     // Regression for the Path double-encode bug: probeRunner must inject the char RAW and let
     // mutateParamValue apply the single path encodeURIComponent. The server (Express) then decodes

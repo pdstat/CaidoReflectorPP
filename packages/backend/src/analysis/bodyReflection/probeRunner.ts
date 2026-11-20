@@ -6,6 +6,7 @@ import { randomValue, findMatches } from "../../utils/text.js";
 import { mutateParamValue } from "../../utils/query.js";
 import { passesContentTypeGating } from "../../utils/http.js";
 import { allowedDetectionContextsFor, isLiteralContext } from "../../utils/contexts.js";
+import { toCanonical, CONTEXT } from "../contextMap.js";
 import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
 import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 
@@ -175,8 +176,30 @@ export async function runProbes(
             if (!hasExploitable) confirmed = false;
         }
     }
+    // "confirmed" must mean an exploitable breakout was achieved, not merely that a char
+    // reflected literally. In contexts that need a breakout char to be dangerous (the
+    // HTML/attribute/CSS/rawtext family), demote to unconfirmed when nothing exploitable
+    // survived -- this is what stops fully-escaped/encoded endpoints from reporting
+    // confirmed findings on inert chars. Code contexts (js/eventHandler/jsUri/importMap)
+    // are exploitable by the reflection itself and are not gated; JSON string contexts are
+    // handled by the block above.
+    if (confirmed) {
+        const canonical = toCanonical(bestContext) ?? bestContext;
+        const hasExploitableChar = [...successfulChars].some(c => c !== "");
+        if (!hasExploitableChar && NEEDS_BREAKOUT.has(canonical)) {
+            confirmed = false;
+        }
+    }
     return { confirmed, reflected, successfulChars, bestContext, probeWasStable };
 }
+
+// Contexts where a reflection is only exploitable if a breakout character survives.
+const NEEDS_BREAKOUT = new Set<string>([
+    CONTEXT.HTML, CONTEXT.HTML_COMMENT, CONTEXT.HTML_BASE_INJECTION,
+    CONTEXT.SVG_CONTEXT, CONTEXT.MATH_CONTEXT, CONTEXT.RAWTEXT_ELEMENT,
+    CONTEXT.ATTRIBUTE, CONTEXT.ATTRIBUTE_IN_QUOTE, CONTEXT.ATTRIBUTE_ESCAPED,
+    CONTEXT.CSS, CONTEXT.CSS_IN_QUOTE, CONTEXT.DOM_CLOBBER,
+]);
 
 export async function runCountProbe(
     sdk: SDK,

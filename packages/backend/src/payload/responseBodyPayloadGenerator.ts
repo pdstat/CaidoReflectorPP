@@ -334,8 +334,12 @@ const ResponseBodyPayloadGenerator = class {
 				if (!raw) continue;
 				const marker = prefix + payload + suffix;
 				if (raw.value.includes(marker)) {
-					sdk.console.log(`\[Reflector++] found [${payload}] is reflected in quoted attribute`);
-					out.push({ char: payload, context: "attributeInQuote" });
+					// Only the ENCLOSING quote breaks out of the attribute; the other quote
+					// reflects inertly inside the value and must not count as a breakout.
+					if (payload === raw.quote) {
+						sdk.console.log(`\[Reflector++] found enclosing-quote [${payload}] breakout in quoted attribute`);
+						out.push({ char: payload, context: "attributeInQuote" });
+					}
 					found = true;
 					break;
 				}
