@@ -874,7 +874,7 @@ const ResponseBodyPayloadGenerator = class {
 				out.push({ char: payload, context: c });
 			}
 		}
-		const _metaChars = new Set(["/", "//", "http:", ";", ":", "?", "#"]);
+		const _metaChars = new Set(["/", "//", "http:", ";", ":", "?", "#", '"', "<", ">"]);
 		if (ctx.context.includes("metaRefresh") && _metaChars.has(payload)) {
 			if (this._markerInMetaRefresh(marker)) {
 				out.push({ char: payload, context: "metaRefresh" });
@@ -1613,6 +1613,7 @@ const ResponseBodyPayloadGenerator = class {
 			}
 			payloadSet.add("<");
 			payloadSet.add(">");
+			payloadSet.add("/"); // needed to detect a </style> breakout from a quoted CSS string
 			payloadSet.add(";");
 			payloadSet.add("(");
 			payloadSet.add(")");
@@ -1796,6 +1797,10 @@ const ResponseBodyPayloadGenerator = class {
 					payloadSet.add(":");
 					payloadSet.add("?");
 					payloadSet.add("#");
+					// Breakout of content="0;url=..." (enclosing quote) and tag injection.
+					payloadSet.add('"');
+					payloadSet.add("<");
+					payloadSet.add(">");
 					return;
 				}
 			}
