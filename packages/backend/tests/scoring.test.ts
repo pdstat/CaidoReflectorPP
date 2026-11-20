@@ -318,10 +318,10 @@ describe("classifySeverity", () => {
     })).toBe('low');
   });
 
-  test("confirmed HTML with < is medium", () => {
+  test("confirmed HTML with < is high (new-tag injection: XSS or dangling markup)", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['<'], context: 'html'
-    })).toBe('medium');
+    })).toBe('high');
   });
 
   test("confirmed CSS is medium", () => {
@@ -451,16 +451,16 @@ describe("classifySeverity", () => {
   });
 
   // Feature 3: SVG/MathML
-  test("confirmed svgContext with < is medium", () => {
+  test("confirmed svgContext with < is high (foreign-content tag injection)", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['<'], context: 'svgContext'
-    })).toBe('medium');
+    })).toBe('high');
   });
 
-  test("confirmed mathContext with < is medium", () => {
+  test("confirmed mathContext with < is high (foreign-content tag injection)", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['<'], context: 'mathContext'
-    })).toBe('medium');
+    })).toBe('high');
   });
 
   test("confirmed svgContext without < is low", () => {

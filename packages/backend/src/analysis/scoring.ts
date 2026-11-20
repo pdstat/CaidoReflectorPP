@@ -126,6 +126,17 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   if (canonical === CONTEXT.HTML_BASE_INJECTION && hasTagEscape(chars)) {
     return 'high';
   }
+  // Raw "<" in a context where it can open a new tag is a working reflected XSS:
+  // directly, by borrowing a downstream ">" the page already contains, or as
+  // dangling-markup data exfiltration. All high regardless of whether ">" also
+  // reflects. Rawtext/attribute/CSS contexts, where "<" cannot open a tag, stay
+  // in the medium tier below.
+  if ((canonical === CONTEXT.HTML
+      || canonical === CONTEXT.SVG_CONTEXT
+      || canonical === CONTEXT.MATH_CONTEXT)
+      && hasTagEscape(chars)) {
+    return 'high';
+  }
   if (inp.header) {
     const names = new Set(
       inp.headerNames?.map(h => h.toLowerCase()) ?? []
@@ -143,9 +154,6 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   if (canonical === CONTEXT.RAWTEXT_ELEMENT) {
     if (hasClosingTagBreakout(chars) && hasTagEscape(chars)) return 'medium';
   }
-  if (canonical === CONTEXT.SVG_CONTEXT && hasTagEscape(chars)) return 'medium';
-  if (canonical === CONTEXT.MATH_CONTEXT && hasTagEscape(chars)) return 'medium';
-  if (canonical === CONTEXT.HTML && hasTagEscape(chars)) return 'medium';
   if (canonical === CONTEXT.HTML_BASE_INJECTION) return 'medium';
   if (CSS_CONTEXTS.has(canonical)) return 'medium';
   if (canonical === CONTEXT.ATTRIBUTE) return 'medium';
