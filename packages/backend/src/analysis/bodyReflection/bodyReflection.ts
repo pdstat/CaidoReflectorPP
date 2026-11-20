@@ -85,7 +85,16 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
 
     if (confirmed) {
       const allowedChars = Array.from(probeChars);
-      const severity = classifySeverity({ confirmed, allowedChars, context: resolvedCtx, header: false });
+      let severity = classifySeverity({ confirmed, allowedChars, context: resolvedCtx, header: false });
+      // Over-rate corrections: these are genuine reflections but not executable as-is.
+      // A 3xx response body is not rendered by browsers (they follow the redirect), so a
+      // body reflection there cannot fire -- cap it at low. <template> content is inert
+      // until a script clones it, so cap tag injection there at medium.
+      if (baselineCode >= 300 && baselineCode < 400 && severity !== 'info') {
+        severity = 'low';
+      } else if (/template/i.test(resolvedCtx) && (severity === 'high' || severity === 'critical')) {
+        severity = 'medium';
+      }
       const otherContexts: Record<string, number> = {};
       if (contextInfo?.context) {
         const primaryCanonical = toCanonical(resolvedCtx);
