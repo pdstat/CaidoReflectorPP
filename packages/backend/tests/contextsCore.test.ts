@@ -56,8 +56,8 @@ describe("allowedDetectionContextsFor", () => {
   });
 
   test("url attribute variants", () => {
-    expect(Array.from(allowedDetectionContextsFor("URL Attribute (quoted)").values()).sort()).toEqual(["urlAttr", "urlAttrInQuote"].sort());
-    expect(Array.from(allowedDetectionContextsFor("URL Attribute (unquoted)").values()).sort()).toEqual(["urlAttr", "urlAttrInQuote"].sort());
+    expect(Array.from(allowedDetectionContextsFor("URL Attribute (quoted)").values()).sort()).toEqual(["attributeInQuote", "urlAttr", "urlAttrInQuote"].sort());
+    expect(Array.from(allowedDetectionContextsFor("URL Attribute (unquoted)").values()).sort()).toEqual(["attributeInQuote", "urlAttr", "urlAttrInQuote"].sort());
   });
 
   test("style attribute variants", () => {
@@ -70,11 +70,11 @@ describe("allowedDetectionContextsFor", () => {
   });
 
   test("srcset", () => {
-    expect(Array.from(allowedDetectionContextsFor("Srcset Attribute (quoted)").values()).sort()).toEqual(["srcsetUrl", "srcsetUrlInQuote"].sort());
+    expect(Array.from(allowedDetectionContextsFor("Srcset Attribute (quoted)").values()).sort()).toEqual(["attributeInQuote", "srcsetUrl", "srcsetUrlInQuote"].sort());
   });
 
   test("meta refresh", () => {
-    expect(Array.from(allowedDetectionContextsFor("Meta Refresh URL").values())).toEqual(["metaRefresh"]);
+    expect(Array.from(allowedDetectionContextsFor("Meta Refresh URL").values()).sort()).toEqual(["attributeInQuote", "metaRefresh"].sort());
   });
 
   test("iframe srcdoc", () => {
