@@ -282,6 +282,41 @@ describe("runProbes()", () => {
     expect(result.successfulChars.has(";")).toBe(false);
   });
 
+  test("Backtick in a sealed double-quoted JS string stays low, so HTML still wins", async () => {
+    // A backtick is only a breakout in an UNQUOTED JS string. The chosen context label
+    // carries its enclosing quote ("), so the backtick is inert and the context is low;
+    // the live "<" in HTML must still out-rank it. Guards against re-prettifying the
+    // chosen label (which would drop the quote and misread the backtick as a breakout).
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) => {
+      if (!body.includes(pre + ch + suf)) return [];
+      if (ch === "<") return [{ context: "html", char: ch }];
+      return [{ context: "jsInQuote", char: ch }];
+    });
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const chars = ["<", "`"];
+    const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
+    const bodyContent = baselineBody + chars.map(needle).join("");
+    const sdk = buildSdk(async () => ({ response: buildResponse(bodyContent) }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["jsInQuote", "html"], payload: chars },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "Script String (\")"
+    );
+    expect(result.confirmed).toBe(true);
+    expect(result.bestContext).toBe("HTML");
+    expect(result.successfulChars.has("<")).toBe(true);
+    expect(result.successfulChars.has("`")).toBe(false);
+  });
+
   test("Does not escalate when the live HTML char does not out-rank the chosen context", async () => {
     // "<" only reflects inside a rawtext element where it cannot open a tag (low),
     // while the chosen JS (non-string) context is high -> no escalation.

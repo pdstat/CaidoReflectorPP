@@ -47,11 +47,22 @@ const HTML_FAMILY_CONTEXTS = new Set<string>([
     "html", "svgContext", "mathContext", "rawtextElement", "htmlComment", "htmlBaseInjection",
 ]);
 
-function severityOf(context: string, chars: Set<string>): SeverityTier {
+// Tie-break order when several HTML-family contexts share the top severity: plain HTML
+// flow text is the most direct and least ambiguous, so it is preferred over a looser
+// rawtext/comment match that may have claimed the same raw "<" occurrence.
+const HTML_FAMILY_PREFERENCE = [
+    "html", "svgContext", "mathContext", "htmlBaseInjection", "rawtextElement", "htmlComment",
+];
+
+// `contextLabel` must be a display label (e.g. "HTML Comment", "Script String (\")"),
+// not a raw detection key -- classifySeverity reads the enclosing quote from the label,
+// so prettyPrintContext must be applied to raw keys BEFORE calling this, never here
+// (re-prettifying a label strips its quote and misreads an inert char as a breakout).
+function severityOf(contextLabel: string, chars: Set<string>): SeverityTier {
     return classifySeverity({
         confirmed: true,
         allowedChars: Array.from(chars),
-        context: prettyPrintContext(context) ?? context,
+        context: contextLabel,
         header: false,
     });
 }
@@ -212,22 +223,23 @@ export async function runProbes(
     // Report the worst breakout that actually works: if a tag-opening char survived in
     // HTML text (or SVG/MathML/rawtext/comment) and scores higher than the chosen
     // context, switch to it so a sealed JS string / attribute does not mask live XSS.
+    // Among contexts that tie on severity, prefer the most direct one (plain HTML over
+    // a looser rawtext/comment match that may have claimed the same occurrence).
     if (confirmed && htmlFamilyChars.size > 0) {
-        let bestRank = SEVERITY_RANK[severityOf(bestContext, successfulChars)];
-        let escalatedContext: string | undefined;
-        let escalatedChars: Set<string> | undefined;
+        const chosenRank = SEVERITY_RANK[severityOf(bestContext, successfulChars)];
+        let best: { ctx: string; chars: Set<string>; rank: number; pref: number } | undefined;
         for (const [ctx, chars] of htmlFamilyChars) {
-            const rank = SEVERITY_RANK[severityOf(ctx, chars)];
-            if (rank > bestRank) {
-                bestRank = rank;
-                escalatedContext = ctx;
-                escalatedChars = chars;
+            const rank = SEVERITY_RANK[severityOf(prettyPrintContext(ctx) ?? ctx, chars)];
+            if (rank <= chosenRank) continue;
+            const pref = HTML_FAMILY_PREFERENCE.indexOf(ctx);
+            if (!best || rank > best.rank || (rank === best.rank && pref < best.pref)) {
+                best = { ctx, chars, rank, pref };
             }
         }
-        if (escalatedContext && escalatedChars) {
-            bestContext = prettyPrintContext(escalatedContext) ?? escalatedContext;
+        if (best) {
+            bestContext = prettyPrintContext(best.ctx) ?? best.ctx;
             successfulChars.clear();
-            for (const c of escalatedChars) successfulChars.add(c);
+            for (const c of best.chars) successfulChars.add(c);
         }
     }
     return { confirmed, reflected, successfulChars, bestContext, probeWasStable };

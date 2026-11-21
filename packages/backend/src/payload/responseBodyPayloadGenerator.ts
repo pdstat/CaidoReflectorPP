@@ -646,8 +646,13 @@ const ResponseBodyPayloadGenerator = class {
 				pushed = true;
 			}
 		}
-		if (markers.some((m) => this._containsTextOutsideTags(m))) {
-			if (!pushed) out.push({ char: payload, context: "html" });
+		// A raw "<" in genuine HTML flow text is an html breakout, even when a looser
+		// rawtext/comment check above already matched the same occurrence. Exclude the
+		// rawtext elements (their content is not flow text) so a textarea/title-only "<"
+		// stays rawtext and does not become a false html breakout.
+		const flowTextExclude = ["SCRIPT", "STYLE", "TEXTAREA", "TITLE", "NOSCRIPT", "XMP", "IFRAME"];
+		if (markers.some((m) => this._containsTextOutsideTags(m, flowTextExclude))) {
+			out.push({ char: payload, context: "html" });
 		}
 	}
 
