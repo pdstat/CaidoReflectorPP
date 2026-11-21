@@ -249,6 +249,70 @@ describe("runProbes()", () => {
     expect(result.successfulChars.has("<")).toBe(true);
   });
 
+  test("Escalates to live HTML context when the chosen context is a sealed JS string", async () => {
+    // A param reflected in a fully-escaped JS string (sealed) AND raw in HTML text.
+    // The ladder picks the JS string first; the live "<" in HTML must win.
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) => {
+      if (!body.includes(pre + ch + suf)) return [];
+      if (ch === "<") return [{ context: "html", char: ch }];
+      return [{ context: "jsInQuote", char: ch }];
+    });
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const chars = ["<", ";", "("];
+    const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
+    const bodyContent = baselineBody + chars.map(needle).join("");
+    const sdk = buildSdk(async () => ({ response: buildResponse(bodyContent) }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["jsInQuote", "html"], payload: chars },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "Script String (\")"
+    );
+    expect(result.confirmed).toBe(true);
+    expect(result.bestContext).toBe("HTML");
+    expect(result.successfulChars.has("<")).toBe(true);
+    expect(result.successfulChars.has(";")).toBe(false);
+  });
+
+  test("Does not escalate when the live HTML char does not out-rank the chosen context", async () => {
+    // "<" only reflects inside a rawtext element where it cannot open a tag (low),
+    // while the chosen JS (non-string) context is high -> no escalation.
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) => {
+      if (!body.includes(pre + ch + suf)) return [];
+      if (ch === "<") return [{ context: "rawtextElement", char: ch }];
+      return [{ context: "js", char: ch }];
+    });
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const chars = ["<", "a"];
+    const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
+    const bodyContent = baselineBody + chars.map(needle).join("");
+    const sdk = buildSdk(async () => ({ response: buildResponse(bodyContent) }));
+
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["js", "rawtextElement"], payload: chars },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "Script"
+    );
+    expect(result.confirmed).toBe(true);
+    expect(result.bestContext).toBe("Script");
+  });
+
   test("JSON string sealed: structural chars removed when \" and \\ escaped", async () => {
     // Simulate JSON.stringify: " and \ are NOT reflected, but , } ] : are
     const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);

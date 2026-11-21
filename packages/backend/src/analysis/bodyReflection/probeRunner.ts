@@ -6,6 +6,9 @@ import { randomValue, findMatches } from "../../utils/text.js";
 import { mutateParamValue } from "../../utils/query.js";
 import { passesContentTypeGating } from "../../utils/http.js";
 import { allowedDetectionContextsFor, isLiteralContext } from "../../utils/contexts.js";
+import { classifySeverity } from "../scoring.js";
+import { prettyPrintContext } from "../contextMap.js";
+import type { SeverityTier } from "../../core/types.js";
 import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
 import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 
@@ -33,6 +36,26 @@ export interface CountProbeResult {
 // a no-op there.
 const BREAKOUT_FIRST = ["\\", "'", '"', "`"];
 
+const SEVERITY_RANK: Record<SeverityTier, number> = {
+    info: 0, low: 1, medium: 2, high: 3, critical: 4,
+};
+
+// HTML-family contexts where a raw tag-opening char is a live reflected XSS.
+// A sealed higher-priority context (e.g. a fully-escaped JS string) picked by the
+// context ladder must not mask one of these when a breakout char actually survived.
+const HTML_FAMILY_CONTEXTS = new Set<string>([
+    "html", "svgContext", "mathContext", "rawtextElement", "htmlComment", "htmlBaseInjection",
+]);
+
+function severityOf(context: string, chars: Set<string>): SeverityTier {
+    return classifySeverity({
+        confirmed: true,
+        allowedChars: Array.from(chars),
+        context: prettyPrintContext(context) ?? context,
+        header: false,
+    });
+}
+
 export function orderPayloadBreakoutFirst(payload: string[]): string[] {
     return [...payload].sort((a, b) => {
         const ia = BREAKOUT_FIRST.indexOf(a);
@@ -57,6 +80,9 @@ export async function runProbes(
     initialBestContext: string
 ): Promise<ProbeResult> {
     const successfulChars = new Set<string>();
+    // Breakout chars seen literal in an HTML-family context, keyed by that context.
+    // Used after probing to escalate past a sealed context the ladder chose first.
+    const htmlFamilyChars = new Map<string, Set<string>>();
     let confirmed = false; let reflected = false; let probeWasStable = false; let bestContext = initialBestContext;
     if (!contextInfo || !Array.isArray(contextInfo.payload) || contextInfo.payload.length === 0) {
         return { confirmed: false, reflected: false, successfulChars, bestContext, probeWasStable };
@@ -114,6 +140,13 @@ export async function runProbes(
                     const acceptedCtx = allowedDetectionContextsFor(bestContext);
                     const literalInContext = detections.some((d: any) => isLiteralContext(d.context) && (acceptedCtx.size === 0 || acceptedCtx.has(d.context)));
                     if (literalInContext) successfulChars.add(m.ch);
+                    for (const d of detections) {
+                        if (isLiteralContext(d.context) && HTML_FAMILY_CONTEXTS.has(d.context)) {
+                            let s = htmlFamilyChars.get(d.context);
+                            if (!s) { s = new Set<string>(); htmlFamilyChars.set(d.context, s); }
+                            s.add(m.ch);
+                        }
+                    }
                     if (/^html$/i.test(bestContext) || /^body$/i.test(bestContext)) {
                         const preferred = detections.find((d: any) => isLiteralContext(d.context));
                         if (preferred) bestContext = preferred.context;
@@ -173,6 +206,28 @@ export async function runProbes(
             for (const sc of [",", "}", "]", ":", "/"]) successfulChars.delete(sc);
             const hasExploitable = [...successfulChars].some(c => c !== "");
             if (!hasExploitable) confirmed = false;
+        }
+    }
+    // Escalate to a live HTML-family context when the ladder chose a sealed context.
+    // Report the worst breakout that actually works: if a tag-opening char survived in
+    // HTML text (or SVG/MathML/rawtext/comment) and scores higher than the chosen
+    // context, switch to it so a sealed JS string / attribute does not mask live XSS.
+    if (confirmed && htmlFamilyChars.size > 0) {
+        let bestRank = SEVERITY_RANK[severityOf(bestContext, successfulChars)];
+        let escalatedContext: string | undefined;
+        let escalatedChars: Set<string> | undefined;
+        for (const [ctx, chars] of htmlFamilyChars) {
+            const rank = SEVERITY_RANK[severityOf(ctx, chars)];
+            if (rank > bestRank) {
+                bestRank = rank;
+                escalatedContext = ctx;
+                escalatedChars = chars;
+            }
+        }
+        if (escalatedContext && escalatedChars) {
+            bestContext = prettyPrintContext(escalatedContext) ?? escalatedContext;
+            successfulChars.clear();
+            for (const c of escalatedChars) successfulChars.add(c);
         }
     }
     return { confirmed, reflected, successfulChars, bestContext, probeWasStable };
