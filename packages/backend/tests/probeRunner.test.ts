@@ -463,10 +463,11 @@ describe("runProbes()", () => {
     expect(result.successfulChars.has('/')).toBe(true);
   });
 
-  test("confirmed is demoted when no exploitable char survives in a breakout-required context", async () => {
+  test("non-literal (escaped) detection yields no successful char (demotion happens downstream)", async () => {
     // Escaped-endpoint pattern: the probe char reflects but only in an escaped/non-literal
-    // context (no successful breakout char). In an attribute/HTML context that is not a real
-    // finding, so confirmed must be demoted to false.
+    // context, so no breakout char is harvested. runProbes reports reflected=true with an
+    // empty successfulChars set; the confirmed->unconfirmed demotion for such cases is done
+    // in bodyReflection using the computed severity, not here.
     mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
       body.includes(pre + encodeURIComponent(ch) + suf)
         ? [{ context: 'attributeEscaped', char: ch }] : []
@@ -487,9 +488,8 @@ describe("runProbes()", () => {
       KEY_WORDS_LOCAL,
       'Tag Attribute (") Value'
     );
-    expect(result.reflected).toBe(true);        // the char did reflect
-    expect(result.successfulChars.size).toBe(0); // but no literal breakout
-    expect(result.confirmed).toBe(false);        // so NOT a confirmed finding
+    expect(result.reflected).toBe(true);         // the char did reflect
+    expect(result.successfulChars.size).toBe(0); // but no literal breakout char harvested
   });
 
   test("Path source: breakout char injected raw (no double-encode) is detected", async () => {

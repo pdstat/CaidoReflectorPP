@@ -6,7 +6,7 @@ import { buildEndpoint } from "../../utils/http.js";
 import { enumerateRequestParameters } from "../../utils/params.js";
 import { KEY_WORDS } from "../../core/constants.js";
 import { classifySeverity } from "../scoring.js";
-import { toCanonical } from "../contextMap.js";
+import { toCanonical, CONTEXT } from "../contextMap.js";
 import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
 import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 import { getTags } from "./context.js";
@@ -17,6 +17,17 @@ import { resolveBestContext } from "./contextResolution.js";
 import { detectEncodedOnly } from "./encodedSignalDetection.js";
 
 type ReflectedParameter = AnalyzedReflectedParameter;
+
+// Contexts where a reflection is only exploitable if a breakout char survives. In these,
+// a 'low' severity means no breakout was achieved, so the finding is not confirmed. Code
+// contexts (js/eventHandler/jsUri/importMap) are exploitable by the reflection itself and
+// are excluded; JSON string contexts are handled inside runProbes.
+const NEEDS_BREAKOUT = new Set<string>([
+  CONTEXT.HTML, CONTEXT.HTML_COMMENT, CONTEXT.HTML_BASE_INJECTION,
+  CONTEXT.SVG_CONTEXT, CONTEXT.MATH_CONTEXT, CONTEXT.RAWTEXT_ELEMENT,
+  CONTEXT.ATTRIBUTE, CONTEXT.ATTRIBUTE_IN_QUOTE, CONTEXT.ATTRIBUTE_ESCAPED,
+  CONTEXT.CSS, CONTEXT.CSS_IN_QUOTE,
+]);
 
 
 export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconfirmed = false): Promise<ReflectedParameter[]> {
@@ -33,7 +44,11 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
   const normalizedType = Array.isArray(rawContentType)
     ? rawContentType.find((v) => v && v.trim() !== "")
     : typeof rawContentType === "string" && rawContentType.trim() !== "" ? rawContentType : undefined;
-  const isJsonResponse = normalizedType?.toLowerCase().split(";")[0] === "application/json";
+  const contentTypeBase = normalizedType?.toLowerCase().split(";")[0];
+  const isJsonResponse = contentTypeBase === "application/json";
+  // Analyzed for reflections but NOT rendered as HTML by the browser (e.g. Next.js RSC
+  // flight payloads), so any tag-injection there is not executable -- scored conservatively.
+  const isNonRenderedBody = contentTypeBase === "text/x-component";
   const payloadGenerator = isJsonResponse
     ? new JsonResponseBodyPayloadGenerator(bodyText)
     : new ResponseBodyPayloadGenerator(bodyText);
@@ -83,18 +98,34 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
       }
     }
 
-    if (confirmed) {
-      const allowedChars = Array.from(probeChars);
-      let severity = classifySeverity({ confirmed, allowedChars, context: resolvedCtx, header: false });
-      // Over-rate corrections: these are genuine reflections but not executable as-is.
-      // A 3xx response body is not rendered by browsers (they follow the redirect), so a
-      // body reflection there cannot fire -- cap it at low. <template> content is inert
-      // until a script clones it, so cap tag injection there at medium.
-      if (baselineCode >= 300 && baselineCode < 400 && severity !== 'info') {
+    let isConfirmed = confirmed;
+    let severity: ReturnType<typeof classifySeverity> = 'info';
+    let allowedChars: string[] = [];
+    if (isConfirmed) {
+      allowedChars = Array.from(probeChars);
+      severity = classifySeverity({ confirmed: true, allowedChars, context: resolvedCtx, header: false });
+      // Over-rate corrections: genuine reflections that are not executable as-is.
+      // A 3xx body is not rendered (browsers follow the redirect) and an RSC flight body
+      // is not HTML-rendered -- cap both at low. <template> content is inert until a script
+      // clones it -- cap tag injection there at medium.
+      if ((isNonRenderedBody || (baselineCode >= 300 && baselineCode < 400)) && severity !== 'info') {
         severity = 'low';
       } else if (/template/i.test(resolvedCtx) && (severity === 'high' || severity === 'critical')) {
         severity = 'medium';
       }
+      // confirmed-gate: in a context that needs a breakout char to be dangerous, demote to
+      // unconfirmed when no breakout was achieved -- i.e. a 'low' result (reuses
+      // classifySeverity's per-context logic, catching inert survivors like a non-enclosing
+      // quote or "/"/";" in HTML text) OR no non-empty char survived at all (catches
+      // endpoints whose context scores medium by default, e.g. an unquoted attribute that
+      // URL-encodes every breakout char).
+      const gateCanonical = toCanonical(resolvedCtx);
+      const noBreakoutChar = !allowedChars.some(c => c !== "");
+      if ((severity === 'low' || noBreakoutChar) && gateCanonical && NEEDS_BREAKOUT.has(gateCanonical)) {
+        isConfirmed = false;
+      }
+    }
+    if (isConfirmed) {
       const otherContexts: Record<string, number> = {};
       if (contextInfo?.context) {
         const primaryCanonical = toCanonical(resolvedCtx);
