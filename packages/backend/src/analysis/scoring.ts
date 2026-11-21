@@ -11,6 +11,7 @@ export interface SeverityInputs {
   header?: boolean;
   headerNames?: string[];
   redirectPosition?: RedirectPosition;
+  allowCredentials?: boolean;
 }
 
 const SCRIPT_CONTEXTS = new Set<string>([
@@ -137,6 +138,23 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
       && hasTagEscape(chars)) {
     return 'high';
   }
+  // Inside an HTML comment "<" is inert until the comment is closed, so a working XSS
+  // needs to close the comment ("-->") AND open a tag: "-", ">" and "<" must all reflect.
+  if (canonical === CONTEXT.HTML_COMMENT
+      && chars.includes('<') && chars.includes('>') && chars.includes('-')) {
+    return 'high';
+  }
+  // CSS that can write "</style><script>" (raw "<" and "/") is a real reflected XSS,
+  // not just style injection.
+  if (CSS_CONTEXTS.has(canonical) && hasScriptTagEscape(chars)) {
+    return 'high';
+  }
+  // Unquoted attribute value: a raw space injects a new attribute (e.g. onfocus= autofocus)
+  // and a raw ">" breaks out of the tag entirely -- both are handler/tag-injection XSS.
+  if (canonical === CONTEXT.ATTRIBUTE
+      && (chars.includes(' ') || chars.includes('>'))) {
+    return 'high';
+  }
   if (inp.header) {
     const names = new Set(
       inp.headerNames?.map(h => h.toLowerCase()) ?? []
@@ -148,6 +166,13 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
         && hasCookieInjectionChars(chars)) return 'high';
     if (names.has('content-security-policy')
         && hasCSPBypassChars(chars)) return 'high';
+    // A reflected Access-Control-Allow-Origin lets an attacker-chosen origin read the
+    // response (CORS misconfiguration); combined with Allow-Credentials: true it exposes
+    // authenticated data -> critical. The reflection itself is the vulnerability, so no
+    // breakout char is required.
+    if (names.has('access-control-allow-origin')) {
+      return inp.allowCredentials ? 'critical' : 'high';
+    }
   }
 
   // Medium tier

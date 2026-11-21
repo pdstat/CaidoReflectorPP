@@ -462,6 +462,67 @@ describe("runProbes()", () => {
     expect(result.successfulChars.has('"')).toBe(true);
     expect(result.successfulChars.has('/')).toBe(true);
   });
+
+  test("non-literal (escaped) detection yields no successful char (demotion happens downstream)", async () => {
+    // Escaped-endpoint pattern: the probe char reflects but only in an escaped/non-literal
+    // context, so no breakout char is harvested. runProbes reports reflected=true with an
+    // empty successfulChars set; the confirmed->unconfirmed demotion for such cases is done
+    // in bodyReflection using the computed severity, not here.
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + encodeURIComponent(ch) + suf)
+        ? [{ context: 'attributeEscaped', char: ch }] : []
+    );
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const needle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + needle('"')) }));
+    const result = await runProbes(
+      sdk,
+      buildRequestWrapper(),
+      { key: "p", source: "URL", value: "orig" },
+      { context: ["attributeInQuote"], payload: ['"'] },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      'Tag Attribute (") Value'
+    );
+    expect(result.reflected).toBe(true);         // the char did reflect
+    expect(result.successfulChars.size).toBe(0); // but no literal breakout char harvested
+  });
+
+  test("Path source: breakout char injected raw (no double-encode) is detected", async () => {
+    // Regression for the Path double-encode bug: probeRunner must inject the char RAW and let
+    // mutateParamValue apply the single path encodeURIComponent. The server (Express) then decodes
+    // once, so the char reflects raw. Before the fix the char was encoded twice (%253C) and never
+    // reflected raw, silently downgrading severity.
+    mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+      body.includes(pre + ch + suf) ? [{ context: 'html', char: ch }] : []
+    );
+    const baselineBody = "abc";
+    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const sdk = buildSdk(async (spec: any) => {
+      // Simulate Express decoding the path segment exactly once.
+      const seg = spec.getPath().split('/').pop() as string;
+      const decodedOnce = decodeURIComponent(seg);
+      return { response: buildResponse(baselineBody + decodedOnce) };
+    });
+    const result = await runProbes(
+      sdk,
+      { toSpec: () => buildPathRequestSpec("/seg0/seg1") },
+      { key: "path:1:seg1", source: "Path", value: "seg1" },
+      { context: ["html"], payload: ["<"] },
+      [],
+      200,
+      baselineSig,
+      baselineBody,
+      KEY_WORDS_LOCAL,
+      "html"
+    );
+    expect(result.confirmed).toBe(true);
+    expect(result.successfulChars.has('<')).toBe(true);
+  });
 });
 
 describe("orderPayloadBreakoutFirst()", () => {

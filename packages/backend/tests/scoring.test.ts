@@ -324,10 +324,16 @@ describe("classifySeverity", () => {
     })).toBe('high');
   });
 
-  test("confirmed CSS is medium", () => {
+  test("confirmed CSS without </style> breakout is medium", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: [], context: 'css'
     })).toBe('medium');
+  });
+
+  test("confirmed CSS with </style><script> breakout (< and /) is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<', '/'], context: 'css'
+    })).toBe('high');
   });
 
   test("confirmed CSS in quote is medium", () => {
@@ -336,9 +342,21 @@ describe("classifySeverity", () => {
     })).toBe('medium');
   });
 
-  test("confirmed unquoted attribute is medium", () => {
+  test("confirmed unquoted attribute with space (handler injection) is high", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: [' '], context: 'attribute'
+    })).toBe('high');
+  });
+
+  test("confirmed unquoted attribute with > (tag breakout) is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['>'], context: 'attribute'
+    })).toBe('high');
+  });
+
+  test("confirmed unquoted attribute without breakout is medium", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['='], context: 'attribute'
     })).toBe('medium');
   });
 
@@ -348,12 +366,21 @@ describe("classifySeverity", () => {
     })).toBe('medium');
   });
 
-  test("confirmed CORS header (other header) is medium", () => {
+  test("confirmed reflected ACAO (no credentials) is high", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: [],
       context: 'Response Header', header: true,
       headerNames: ['Access-Control-Allow-Origin']
-    })).toBe('medium');
+    })).toBe('high');
+  });
+
+  test("confirmed reflected ACAO with Allow-Credentials:true is critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [],
+      context: 'Response Header', header: true,
+      headerNames: ['Access-Control-Allow-Origin'],
+      allowCredentials: true
+    })).toBe('critical');
   });
 
   test("confirmed custom header is medium", () => {
@@ -370,9 +397,21 @@ describe("classifySeverity", () => {
     })).toBe('low');
   });
 
-  test("confirmed HTML comment is low", () => {
+  test("confirmed HTML comment without breakout is low", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: [], context: 'htmlComment'
+    })).toBe('low');
+  });
+
+  test("confirmed HTML comment with --> and tag (-, >, <) is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['-', '>', '<'], context: 'htmlComment'
+    })).toBe('high');
+  });
+
+  test("confirmed HTML comment with < but no --> stays low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<'], context: 'htmlComment'
     })).toBe('low');
   });
 

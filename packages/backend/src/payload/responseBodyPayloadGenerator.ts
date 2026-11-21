@@ -334,8 +334,12 @@ const ResponseBodyPayloadGenerator = class {
 				if (!raw) continue;
 				const marker = prefix + payload + suffix;
 				if (raw.value.includes(marker)) {
-					sdk.console.log(`\[Reflector++] found [${payload}] is reflected in quoted attribute`);
-					out.push({ char: payload, context: "attributeInQuote" });
+					// Only the ENCLOSING quote breaks out of the attribute; the other quote
+					// reflects inertly inside the value and must not count as a breakout.
+					if (payload === raw.quote) {
+						sdk.console.log(`\[Reflector++] found enclosing-quote [${payload}] breakout in quoted attribute`);
+						out.push({ char: payload, context: "attributeInQuote" });
+					}
 					found = true;
 					break;
 				}
@@ -870,7 +874,7 @@ const ResponseBodyPayloadGenerator = class {
 				out.push({ char: payload, context: c });
 			}
 		}
-		const _metaChars = new Set(["/", "//", "http:", ";", ":", "?", "#"]);
+		const _metaChars = new Set(["/", "//", "http:", ";", ":", "?", "#", '"', "<", ">"]);
 		if (ctx.context.includes("metaRefresh") && _metaChars.has(payload)) {
 			if (this._markerInMetaRefresh(marker)) {
 				out.push({ char: payload, context: "metaRefresh" });
@@ -1609,6 +1613,7 @@ const ResponseBodyPayloadGenerator = class {
 			}
 			payloadSet.add("<");
 			payloadSet.add(">");
+			payloadSet.add("/"); // needed to detect a </style> breakout from a quoted CSS string
 			payloadSet.add(";");
 			payloadSet.add("(");
 			payloadSet.add(")");
@@ -1792,6 +1797,10 @@ const ResponseBodyPayloadGenerator = class {
 					payloadSet.add(":");
 					payloadSet.add("?");
 					payloadSet.add("#");
+					// Breakout of content="0;url=..." (enclosing quote) and tag injection.
+					payloadSet.add('"');
+					payloadSet.add("<");
+					payloadSet.add(">");
 					return;
 				}
 			}

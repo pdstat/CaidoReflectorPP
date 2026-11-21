@@ -11,6 +11,8 @@ export const isLiteralContext = (ctx: string): boolean => {
 export const allowedDetectionContextsFor = (bestContext: string): Set<string> => {
   const c = (bestContext || '').toLowerCase();
   if (c.includes('json script block') || c.includes('json block')) return new Set(['jsonInQuote', 'json']);
+  // Must precede the generic 'script' check: "javascript uri" contains "script".
+  if (c.includes('javascript uri')) return new Set(['jsUri']);
   if (c.includes('script string') || c === 'script' || c.includes('script')) return new Set(['jsInQuote', 'js']);
   if (c.includes('style attribute')) return new Set(['styleAttrInQuote', 'styleAttr']);
   if (c.includes('style string') || c === 'style' || c.includes('style')) return new Set(['cssInQuote', 'css']);

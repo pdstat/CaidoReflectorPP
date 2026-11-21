@@ -66,7 +66,13 @@ export async function runProbes(
     for (let i = 0; i < orderedPayload.length; i += BATCH) {
         const batch = orderedPayload.slice(i, i + BATCH);
         const markers = batch.map((ch: string) => ({ ch, pre: randomValue(5), suf: randomValue(5) }));
-        const skipEncode = param.source === 'BodyJson' || param.source === 'UrlJson';
+        // Header values are transmitted verbatim (not URL-decoded server-side), and Path
+        // segments are encoded exactly once by mutateParamValue. Pre-encoding the probe char
+        // here would leave it percent-encoded in the reflection (Header) or double-encoded
+        // (Path), so the dangerous char never reflects raw and severity is under-reported.
+        // URL/Body/Cookie are decoded once in transit, so they still need encoding here.
+        const skipEncode = param.source === 'BodyJson' || param.source === 'UrlJson'
+            || param.source === 'Header' || param.source === 'Path';
         const injected = markers.map((m: { ch: string; pre: string; suf: string }) => m.pre + (skipEncode ? m.ch : encodeURIComponent(m.ch)) + m.suf).join("");
         const probeSpec: any = request.toSpec();
         mutateParamValue(probeSpec, param, injected, sdk as any);

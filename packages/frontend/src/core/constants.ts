@@ -14,5 +14,6 @@ export const NO_SNIFF_CONTENT_TYPES = new Set([
   'text/vtt',
   'text/cache-manifest',
   'model/vnd.usdz+zip',
-  'video/mp2t'
+  'video/mp2t',
+  'text/x-component'
 ]);
