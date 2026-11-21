@@ -7,6 +7,24 @@ describe("classifySeverity", () => {
     })).toBe('info');
   });
 
+  test("non-enclosing quote in a double-quoted URL attribute is not high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ["'"], context: 'URL Attribute (")'
+    })).toBe('low');
+  });
+
+  test("enclosing quote breakout in a double-quoted URL attribute is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"'], context: 'URL Attribute (")'
+    })).toBe('high');
+  });
+
+  test("enclosing quote breakout in a quoted meta refresh URL is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"'], context: 'Meta Refresh URL (")'
+    })).toBe('high');
+  });
+
   test("confirmed script string with quote breakout is critical", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['"'], context: 'jsInQuote'

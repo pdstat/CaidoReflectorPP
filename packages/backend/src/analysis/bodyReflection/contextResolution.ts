@@ -12,6 +12,10 @@ export function resolveBestContext(
     let bestContext = getReflectionContext(baselineMatches, bodyText, tags as any);
     if (contextInfo && contextInfo.context) {
         const ctxArr = contextInfo?.context ?? [];
+        // The real enclosing quote of a quoted attribute, so scoring rejects a
+        // non-enclosing quote (inert) and credits the enclosing one (a breakout).
+        const quoteSuffix = ctxArr.includes('attrInDQuote') ? ' (")'
+            : ctxArr.includes('attrInSQuote') ? " (')" : ' (quoted)';
         if (ctxArr.includes('jsTemplateLiteral')) bestContext = 'JS Template Literal';
         else if (ctxArr.includes('jsUri')) bestContext = 'JavaScript URI';
         else if (ctxArr.includes('jsInQuote')) {
@@ -30,14 +34,14 @@ export function resolveBestContext(
         else if (ctxArr.includes('eventHandlerAttr')) bestContext = 'Event Handler Attribute (unquoted)';
         else if (ctxArr.includes('eventHandler')) bestContext = 'Event Handler Attribute';
         else if (ctxArr.includes('dataUri')) bestContext = 'Data URI';
-        else if (ctxArr.includes('urlAttrInQuote')) bestContext = 'URL Attribute (quoted)';
+        else if (ctxArr.includes('urlAttrInQuote')) bestContext = 'URL Attribute' + quoteSuffix;
         else if (ctxArr.includes('urlAttr')) bestContext = 'URL Attribute (unquoted)';
         else if (ctxArr.includes('cssUrl')) bestContext = 'CSS url()';
         else if (ctxArr.includes('styleAttrInQuote')) bestContext = 'Style Attribute (quoted)';
         else if (ctxArr.includes('styleAttr')) bestContext = 'Style Attribute (unquoted)';
-        else if (ctxArr.includes('srcsetUrlInQuote')) bestContext = 'Srcset Attribute (quoted)';
+        else if (ctxArr.includes('srcsetUrlInQuote')) bestContext = 'Srcset Attribute' + quoteSuffix;
         else if (ctxArr.includes('srcsetUrl')) bestContext = 'Srcset Attribute (unquoted)';
-        else if (ctxArr.includes('metaRefresh')) bestContext = 'Meta Refresh URL';
+        else if (ctxArr.includes('metaRefresh')) bestContext = 'Meta Refresh URL' + (quoteSuffix === ' (quoted)' ? '' : quoteSuffix);
         else if (ctxArr.includes('srcdocHtmlInQuote')) bestContext = 'Iframe Srcdoc (quoted)';
         else if (ctxArr.includes('srcdocHtml')) bestContext = 'Iframe Srcdoc (unquoted)';
         else if (ctxArr.includes('templateHtml')) bestContext = 'Template HTML';

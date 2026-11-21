@@ -17,10 +17,12 @@ export const allowedDetectionContextsFor = (bestContext: string): Set<string> =>
   if (c.includes('style attribute')) return new Set(['styleAttrInQuote', 'styleAttr']);
   if (c.includes('style string') || c === 'style' || c.includes('style')) return new Set(['cssInQuote', 'css']);
   if (c.includes('event handler')) return new Set(['eventHandlerAttrInQuote', 'eventHandlerAttr', 'eventHandler']);
-  if (c.includes('url attribute')) return new Set(['urlAttrInQuote', 'urlAttr']);
+  // A quoted URL/srcset/meta-refresh value whose enclosing quote breaks out escapes
+  // into generic tag-attribute space, reported as attributeInQuote -- accept it here.
+  if (c.includes('url attribute')) return new Set(['urlAttrInQuote', 'urlAttr', 'attributeInQuote']);
   if (c.includes('css url')) return new Set(['cssUrl']);
-  if (c.includes('srcset')) return new Set(['srcsetUrlInQuote', 'srcsetUrl']);
-  if (c.includes('meta refresh')) return new Set(['metaRefresh']);
+  if (c.includes('srcset')) return new Set(['srcsetUrlInQuote', 'srcsetUrl', 'attributeInQuote']);
+  if (c.includes('meta refresh')) return new Set(['metaRefresh', 'attributeInQuote']);
   if (c.includes('iframe srcdoc') || c.includes('srcdoc')) return new Set(['srcdocHtmlInQuote', 'srcdocHtml']);
   if (c.includes('template html') || c === 'template') return new Set(['templateHtml']);
   if (c.includes('html comment') || c.includes('comment')) return new Set(['htmlComment']);

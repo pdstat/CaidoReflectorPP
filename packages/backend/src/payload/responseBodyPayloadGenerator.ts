@@ -322,7 +322,11 @@ const ResponseBodyPayloadGenerator = class {
 		suffix: string,
 		out: Array<{ char: string; context: string }>
 	) {
-		if (!(ctx.context.includes("attributeInQuote") && (payload === '"' || payload === "'"))) return;
+		// URL/srcset/meta-refresh values live inside a quoted attribute too, so an
+		// enclosing-quote breakout there is the same generic tag-attribute escape. Run
+		// the check for them as well, not only for a plain quoted attribute.
+		const quoteAttrContexts = ["attributeInQuote", "urlAttrInQuote", "srcsetUrlInQuote", "metaRefresh"];
+		if (!(quoteAttrContexts.some((c) => ctx.context.includes(c)) && (payload === '"' || payload === "'"))) return;
 		sdk.console.log(`\[Reflector++] checking [${payload}] is reflected in quoted attribute`);
 		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
 		let found = false;
@@ -642,8 +646,13 @@ const ResponseBodyPayloadGenerator = class {
 				pushed = true;
 			}
 		}
-		if (markers.some((m) => this._containsTextOutsideTags(m))) {
-			if (!pushed) out.push({ char: payload, context: "html" });
+		// A raw "<" in genuine HTML flow text is an html breakout, even when a looser
+		// rawtext/comment check above already matched the same occurrence. Exclude the
+		// rawtext elements (their content is not flow text) so a textarea/title-only "<"
+		// stays rawtext and does not become a false html breakout.
+		const flowTextExclude = ["SCRIPT", "STYLE", "TEXTAREA", "TITLE", "NOSCRIPT", "XMP", "IFRAME"];
+		if (markers.some((m) => this._containsTextOutsideTags(m, flowTextExclude))) {
+			out.push({ char: payload, context: "html" });
 		}
 	}
 
@@ -1764,6 +1773,8 @@ const ResponseBodyPayloadGenerator = class {
 				}
 				if (quoted) {
 					contextSet.add("urlAttrInQuote");
+					contextSet.add(raw!.quote === '"' ? "attrInDQuote" : "attrInSQuote");
+					payloadSet.add(raw!.quote);
 					this._addUrlProbes(payloadSet, true, raw!.quote);
 				} else {
 					contextSet.add("urlAttr");
@@ -1776,6 +1787,7 @@ const ResponseBodyPayloadGenerator = class {
 				const quoted = raw?.quote === '"' || raw?.quote === "'";
 				if (quoted) {
 					contextSet.add("srcsetUrlInQuote");
+					contextSet.add(raw!.quote === '"' ? "attrInDQuote" : "attrInSQuote");
 					payloadSet.add(raw!.quote);
 				} else {
 					contextSet.add("srcsetUrl");
@@ -1790,6 +1802,8 @@ const ResponseBodyPayloadGenerator = class {
 				const httpEquiv = (el.getAttribute?.("http-equiv") || "").toLowerCase();
 				if (httpEquiv === "refresh" && /url\s*=/.test(decoded)) {
 					contextSet.add("metaRefresh");
+					const metaQuote = raw?.quote === "'" ? "'" : '"';
+					contextSet.add(metaQuote === '"' ? "attrInDQuote" : "attrInSQuote");
 					payloadSet.add("/");
 					payloadSet.add("//");
 					payloadSet.add("http:");
@@ -1798,7 +1812,7 @@ const ResponseBodyPayloadGenerator = class {
 					payloadSet.add("?");
 					payloadSet.add("#");
 					// Breakout of content="0;url=..." (enclosing quote) and tag injection.
-					payloadSet.add('"');
+					payloadSet.add(metaQuote);
 					payloadSet.add("<");
 					payloadSet.add(">");
 					return;
