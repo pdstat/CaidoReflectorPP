@@ -30,13 +30,35 @@ describe('reqParamsStore', () => {
     expect(store.paramTested(ep, p)).toBe(true);
   });
 
-  test('dedup ignores value differences', () => {
+  test('value-sensitive: a different value is a distinct test (not deduped)', () => {
     const store = reqParamsStore.get();
-    const ep = 'http://ex/dedup';
+    const ep = 'http://ex/vs';
     store.addParam(ep, makeParam({ key: 'dup', value: 'one' }));
+    // a new value must be re-testable (e.g. 'money' then "money'")
+    expect(store.paramTested(ep, makeParam({ key: 'dup', value: 'two' }))).toBe(false);
     store.addParam(ep, makeParam({ key: 'dup', value: 'two' }));
     const internal = (store as any).reqParams.get(ep) as TrackedParam[];
-    expect(internal.length).toBe(1);
+    expect(internal.length).toBe(2);
+    // same value is deduped
+    expect(store.paramTested(ep, makeParam({ key: 'dup', value: 'one' }))).toBe(true);
+  });
+
+  test('markConfirmed: after a confirmed finding, later values dedupe by name', () => {
+    const store = reqParamsStore.get();
+    const ep = 'http://ex/confirmed';
+    const benign = makeParam({ key: 'qs', value: 'money' });
+    const payload = makeParam({ key: 'qs', value: "money'" });
+    // benign value seen, did not reflect -> payload value is still testable
+    store.addParam(ep, benign);
+    expect(store.paramTested(ep, payload)).toBe(false);
+    // payload reflected + confirmed -> mark it
+    store.addParam(ep, payload);
+    store.markConfirmed(ep, payload);
+    // now ANY further value of qs is deduped by name
+    expect(store.paramTested(ep, makeParam({ key: 'qs', value: '<script>' }))).toBe(true);
+    expect(store.paramTested(ep, makeParam({ key: 'qs', value: 'brandnew' }))).toBe(true);
+    // a different param on the same endpoint is unaffected
+    expect(store.paramTested(ep, makeParam({ key: 'other', value: 'x' }))).toBe(false);
   });
 
   test('different code tracked separately', () => {

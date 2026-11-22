@@ -1,4 +1,5 @@
 import { checkBodyReflections } from "../src/analysis/bodyReflection/bodyReflection.js";
+import { reqParamsStore } from "../src/stores/paramStore.js";
 
 // Helper to build a minimal SDK with controllable probe responses
 const makeSdk = (probeResponder?: (spec: any) => { code?: number; body?: string; headers?: Record<string, string | string[]> }) => {
@@ -282,5 +283,58 @@ describe("checkBodyReflections (expanded)", () => {
             });
         });
         expect(generateMock).toHaveBeenCalledWith(expect.anything(), "jsonVal");
+    });
+});
+
+describe('value-sensitive dedup for URL params (error-gated reflections)', () => {
+    beforeEach(() => { (reqParamsStore as any)._store = undefined; });
+
+    // Probe server that echoes the DECODED qs value raw into HTML (so a probed
+    // breakout char reflects literally and confirms), with no Content-Type so
+    // probe gating passes via the missing-headers path.
+    const rawEchoSdk = () => ({
+        console: { log: () => {} },
+        requests: {
+            send: async (spec: any) => {
+                const q: string = spec.getQuery?.() || '';
+                const m = q.match(/qs=([^&]*)/);
+                let decoded = '';
+                try { decoded = decodeURIComponent(m?.[1] ?? ''); } catch { decoded = m?.[1] ?? ''; }
+                const body = `<html><body>${decoded}</body></html>`;
+                return { response: { getCode: () => 200, getBody: () => ({ toText: () => body }), getHeader: () => undefined } };
+            },
+        },
+    }) as any;
+
+    test('a non-reflecting value does not block a later reflecting value', async () => {
+        const sdk = rawEchoSdk();
+        // 1) benign value: not echoed (SQL-error style no-match page) -> no finding,
+        //    but qs is now seen in the store with value 'money'
+        const out1 = await checkBodyReflections(
+            { request: baseRequest('qs=money'), response: makeResponse('No products matching your criteria.') },
+            sdk
+        );
+        expect(out1.length).toBe(0);
+        // 2) same endpoint, a value that DOES reflect -- must not be deduped
+        const out2 = await checkBodyReflections(
+            { request: baseRequest('qs=moneyX'), response: makeResponse('<html><body>moneyX</body></html>') },
+            sdk
+        );
+        expect(out2.length).toBeGreaterThan(0);
+        expect(out2[0].source).toBe('URL');
+    });
+
+    test('once confirmed, a further value of the same param is deduped by name', async () => {
+        const sdk = rawEchoSdk();
+        const r1 = await checkBodyReflections(
+            { request: baseRequest('qs=reflectA'), response: makeResponse('<html><body>reflectA</body></html>') },
+            sdk
+        );
+        expect(r1.length).toBeGreaterThan(0); // confirmed -> markConfirmed(qs)
+        const r2 = await checkBodyReflections(
+            { request: baseRequest('qs=reflectB'), response: makeResponse('<html><body>reflectB</body></html>') },
+            sdk
+        );
+        expect(r2.length).toBe(0); // deduped by name, not re-probed
     });
 });
