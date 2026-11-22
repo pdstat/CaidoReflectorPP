@@ -48,7 +48,10 @@ function hasStringEscape(chars: string[], context?: string): boolean {
 }
 
 function hasCookieInjectionChars(chars: string[]): boolean {
-  return chars.includes(';');
+  // ';' adds a cookie attribute; CR/LF splits the header. A cookie value cannot
+  // carry ';' (it is the cookie delimiter), so a cookie echoed into Set-Cookie
+  // never matches here -- correctly, since it is not injectable.
+  return chars.includes(';') || chars.includes('\r') || chars.includes('\n');
 }
 
 function hasCSPBypassChars(chars: string[]): boolean {
@@ -162,16 +165,22 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
     if (names.has('location') || names.has('refresh')) {
       return classifyRedirectSeverity(inp.redirectPosition, chars);
     }
-    if (names.has('set-cookie')
-        && hasCookieInjectionChars(chars)) return 'high';
+    // A Set-Cookie reflection is an injection only when a real breakout char
+    // survives (';' adds an attribute, CR/LF splits the header). Any other char
+    // -- notably a bare "'" -- is inert in a cookie value, so it is a low-severity
+    // reflection, not an injection. A cookie-sourced value echoed back into
+    // Set-Cookie lands here at low, since ';' cannot pass through a cookie value.
+    if (names.has('set-cookie')) {
+      return hasCookieInjectionChars(chars) ? 'high' : 'low';
+    }
     if (names.has('content-security-policy')
         && hasCSPBypassChars(chars)) return 'high';
-    // A reflected Access-Control-Allow-Origin lets an attacker-chosen origin read the
-    // response (CORS misconfiguration); combined with Allow-Credentials: true it exposes
-    // authenticated data -> critical. The reflection itself is the vulnerability, so no
-    // breakout char is required.
+    // A reflected Access-Control-Allow-Origin combined with Allow-Credentials: true
+    // exposes authenticated data to an attacker-chosen origin -> critical. Without
+    // credentials, the attacker can read only what any unauthenticated cross-origin
+    // request already can, so the misconfiguration is low severity, not high.
     if (names.has('access-control-allow-origin')) {
-      return inp.allowCredentials ? 'critical' : 'high';
+      return inp.allowCredentials ? 'critical' : 'low';
     }
   }
 

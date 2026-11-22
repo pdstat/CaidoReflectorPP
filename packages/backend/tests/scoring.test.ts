@@ -183,12 +183,26 @@ describe("classifySeverity", () => {
     })).toBe('high');
   });
 
-  test("Set-Cookie header without ; is medium", () => {
+  test("Set-Cookie header with only an inert char ('/=) is low, not an injection", () => {
+    // ' and = are inert inside a cookie value: no new attribute, no header split.
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ["'"],
+      context: 'Response Header', header: true,
+      headerNames: ['Set-Cookie']
+    })).toBe('low');
     expect(classifySeverity({
       confirmed: true, allowedChars: ['='],
       context: 'Response Header', header: true,
       headerNames: ['Set-Cookie']
-    })).toBe('medium');
+    })).toBe('low');
+  });
+
+  test("Set-Cookie header with CR/LF (response splitting) is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['\n'],
+      context: 'Response Header', header: true,
+      headerNames: ['Set-Cookie']
+    })).toBe('high');
   });
 
   test("CSP header with ' is high", () => {
@@ -384,12 +398,12 @@ describe("classifySeverity", () => {
     })).toBe('medium');
   });
 
-  test("confirmed reflected ACAO (no credentials) is high", () => {
+  test("confirmed reflected ACAO without credentials is low (reads only public data)", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: [],
       context: 'Response Header', header: true,
       headerNames: ['Access-Control-Allow-Origin']
-    })).toBe('high');
+    })).toBe('low');
   });
 
   test("confirmed reflected ACAO with Allow-Credentials:true is critical", () => {
