@@ -245,15 +245,27 @@ describe('enumerateRequestParameters', () => {
     expect(pathParams[0].value).toBe('myvalue123');
   });
 
-  test('skips short and common path segments', () => {
+  test('skips structural, short and numeric path segments', () => {
     const sdk = makeSdk();
-    const spec = uniqueSpec({ path: '/api/users/12345/profile-data' });
-    (spec as any).getPath = () => '/api/users/12345/profile-data';
+    const spec = uniqueSpec({ path: '/assets/users/12345/ab/profile-data' });
+    (spec as any).getPath = () => '/assets/users/12345/ab/profile-data';
     const out = enumerateRequestParameters(spec, sdk, 200, false);
-    const pathParams = out.filter(p => p.source === 'Path');
-    // "api" is common, "users" is common, "12345" is numeric, "profile-data" passes
-    expect(pathParams.length).toBe(1);
-    expect(pathParams[0].value).toBe('profile-data');
+    const vals = out.filter(p => p.source === 'Path').map(p => p.value);
+    // 'assets' structural -> skipped; 'users' app word -> kept; '12345' numeric
+    // -> skipped; 'ab' too short -> skipped; 'profile-data' kept.
+    expect(vals).toEqual(['users', 'profile-data']);
+  });
+
+  test('app-meaningful segments are probed; structural ones stay skipped', () => {
+    const sdk = makeSdk();
+    const spec = uniqueSpec({ path: '/static/search/admin/react' });
+    (spec as any).getPath = () => '/static/search/admin/react';
+    const vals = enumerateRequestParameters(spec, sdk, 200, false)
+      .filter(p => p.source === 'Path').map(p => p.value);
+    expect(vals).toContain('search');
+    expect(vals).toContain('admin');
+    expect(vals).not.toContain('static');
+    expect(vals).not.toContain('react');
   });
 
   test('path segment key encodes segment index for mutation', () => {
