@@ -12,6 +12,7 @@ import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGener
 import { getTags } from "./context.js";
 import { modifyAmbiguousParameters } from "./probes.js";
 import { errorParamsStore } from "../../stores/errorStore.js";
+import { reqParamsStore } from "../../stores/paramStore.js";
 import { runProbes, runCountProbe } from "./probeRunner.js";
 import { resolveBestContext } from "./contextResolution.js";
 import { detectEncodedOnly } from "./encodedSignalDetection.js";
@@ -150,6 +151,9 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
         }
       }
       reflectedParameters.push({ name: param.key, matches: finalMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, value: finalValue, confirmed: true, severity, otherContexts: hasOther ? otherContexts : undefined });
+      // Reflection confirmed here: dedupe this param by name from now on, so
+      // later values are not re-probed now that a finding exists for it.
+      reqParamsStore.get().markConfirmed(endpoint, param as any);
     } else if (logUnconfirmed && reflected) {
       sdk.console.log(`[Reflector++] Logging unconfirmed reflection for "${param.key}" (probe markers reflected, no dangerous chars confirmed)`);
       reflectedParameters.push({ name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: undefined, source: param.source, value: param.value, confirmed: false, severity: 'info' });

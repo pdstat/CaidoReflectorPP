@@ -8,17 +8,18 @@ export class BaseTrackedParamStore {
 
   protected constructor() {}
 
-  protected has(endpoint: string, candidate: TrackedParam): boolean {
+  // valueSensitive: when true, the value is part of the identity, so a new
+  // value for the same (key, source, method, code) is a distinct entry. The
+  // request store uses this so a param that did not reflect on one value is
+  // still tested on the next; the error store uses false so a param that
+  // already errored is not retried on every new value.
+  protected has(
+    endpoint: string,
+    candidate: TrackedParam,
+    valueSensitive: boolean
+  ): boolean {
     const params = this.reqParams.get(endpoint);
     if (!params) return false;
-    // Server/environment-controlled sources carry a value that varies per
-    // request (session cookies, User-Agent/Referer, path segments), so the
-    // value is part of the identity: a new value is a new reflection to test.
-    // Query/body values are the tester's own payload, deduped by name alone.
-    const valueSensitive =
-      candidate.source === 'Cookie' ||
-      candidate.source === 'Header' ||
-      candidate.source === 'Path';
     return params.some(
       (param) =>
         param.key === candidate.key &&
@@ -29,9 +30,13 @@ export class BaseTrackedParamStore {
     );
   }
 
-  protected add(endpoint: string, reqParam: TrackedParam): void {
+  protected add(
+    endpoint: string,
+    reqParam: TrackedParam,
+    valueSensitive: boolean
+  ): void {
     const params = this.reqParams.get(endpoint) || [];
-    if (!this.has(endpoint, reqParam)) {
+    if (!this.has(endpoint, reqParam, valueSensitive)) {
       params.push(reqParam);
       this.reqParams.set(endpoint, params);
     }

@@ -11,12 +11,15 @@ const errorParamsStore = class _errorParamsStore extends BaseTrackedParamStore {
     return this._store;
   }
 
+  // Value-insensitive: once a param errors during probing, skip it regardless
+  // of value, so a flaky or probe-rejecting endpoint is not retried on every
+  // new value.
   paramErrored(endpoint: string, candidate: TrackedParam): boolean {
-    return this.has(endpoint, candidate);
+    return this.has(endpoint, candidate, false);
   }
 
   addParam(endpoint: string, reqParam: TrackedParam): void {
-    this.add(endpoint, reqParam);
+    this.add(endpoint, reqParam, false);
   }
 };
 

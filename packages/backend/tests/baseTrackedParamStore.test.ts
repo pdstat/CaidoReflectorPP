@@ -4,8 +4,8 @@ import { TrackedParam } from "../src/stores/trackedParam.js";
 // Test-visible subclass exposing protected internals through thin wrappers
 class TestStore extends BaseTrackedParamStore {
   constructor() { super(); }
-  addParam(endpoint: string, p: TrackedParam) { (this as any).add(endpoint, p); }
-  hasParam(endpoint: string, p: TrackedParam) { return (this as any).has(endpoint, p); }
+  addParam(endpoint: string, p: TrackedParam, vs = false) { (this as any).add(endpoint, p, vs); }
+  hasParam(endpoint: string, p: TrackedParam, vs = false) { return (this as any).has(endpoint, p, vs); }
   count(endpoint: string) { return ((this as any).reqParams.get(endpoint) || []).length; }
 }
 
@@ -56,38 +56,23 @@ describe('BaseTrackedParamStore', () => {
     expect(store.count(ep)).toBe(3);
   });
 
-  test('Cookie source: a different value is a distinct test case', () => {
+  test('value-sensitive mode: a different value is a distinct entry', () => {
     const store = new TestStore();
-    const ep = 'http://example.com/ck';
-    store.addParam(ep, makeParam({ key: 'username', source: 'Cookie', value: 'sessionAAA' }));
-    // same identity fields, new server-controlled value -> must be re-testable
-    store.addParam(ep, makeParam({ key: 'username', source: 'Cookie', value: 'sessionBBB' }));
+    const ep = 'http://example.com/vs';
+    store.addParam(ep, makeParam({ key: 'q', value: 'aaa' }), true);
+    store.addParam(ep, makeParam({ key: 'q', value: 'bbb' }), true);
     expect(store.count(ep)).toBe(2);
-    expect(store.hasParam(ep, makeParam({ key: 'username', source: 'Cookie', value: 'sessionCCC' }))).toBe(false);
+    expect(store.hasParam(ep, makeParam({ key: 'q', value: 'ccc' }), true)).toBe(false);
+    expect(store.hasParam(ep, makeParam({ key: 'q', value: 'aaa' }), true)).toBe(true);
   });
 
-  test('Header source: a different value is a distinct test case', () => {
+  test('value-insensitive mode: a different value is deduped', () => {
     const store = new TestStore();
-    const ep = 'http://example.com/hdr';
-    store.addParam(ep, makeParam({ key: 'header:User-Agent', source: 'Header', value: 'curl/8.0' }));
-    store.addParam(ep, makeParam({ key: 'header:User-Agent', source: 'Header', value: 'Mozilla/5.0' }));
-    expect(store.count(ep)).toBe(2);
-  });
-
-  test('Path source: a different value is a distinct test case', () => {
-    const store = new TestStore();
-    const ep = 'http://example.com/pth';
-    store.addParam(ep, makeParam({ key: 'path:0:seg', source: 'Path', value: 'alpha' }));
-    store.addParam(ep, makeParam({ key: 'path:0:seg', source: 'Path', value: 'beta' }));
-    expect(store.count(ep)).toBe(2);
-  });
-
-  test('URL source stays value-insensitive (payload is the tester\'s own)', () => {
-    const store = new TestStore();
-    const ep = 'http://example.com/url';
-    store.addParam(ep, makeParam({ key: 'q', source: 'URL', value: 'payload1' }));
-    store.addParam(ep, makeParam({ key: 'q', source: 'URL', value: 'payload2' }));
+    const ep = 'http://example.com/vi';
+    store.addParam(ep, makeParam({ key: 'q', value: 'aaa' }), false);
+    store.addParam(ep, makeParam({ key: 'q', value: 'bbb' }), false);
     expect(store.count(ep)).toBe(1);
+    expect(store.hasParam(ep, makeParam({ key: 'q', value: 'zzz' }), false)).toBe(true);
   });
 
   test('multiple mixed distinct variations accumulate correctly', () => {
