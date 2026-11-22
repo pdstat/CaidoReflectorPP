@@ -19,7 +19,12 @@ const SKIP_REQUEST_HEADERS = new Set([
   'pragma', 'te', 'transfer-encoding'
 ]);
 
-const MIN_HEADER_VALUE_LEN = 6;
+// Minimum length for a reflected request-header value to be tracked. Headers
+// alone are gated (query/cookie params are not) because short header values
+// match common substrings; 4 keeps realistic short values (e.g. 'en-US',
+// short IPs) while filtering 1-3 char noise. Coincidental short matches still
+// fail probe confirmation, so this only trades coverage against probe volume.
+const MIN_HEADER_VALUE_LEN = 4;
 
 const MIN_JSON_STRING_LEN = 4;
 const MAX_JSON_PARAMS = 20;
