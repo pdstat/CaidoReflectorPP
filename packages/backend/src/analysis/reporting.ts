@@ -144,7 +144,10 @@ function generateAssessment(
     if (hdrLower.includes("location") || hdrLower.includes("refresh")) {
       return redirectAssessment(redirectPosition, chars);
     }
-    if (hdrLower.includes("set-cookie")) return "Cookie injection";
+    if (hdrLower.includes("set-cookie")) {
+      return (chars.includes(';') || chars.includes('\r') || chars.includes('\n'))
+        ? "Cookie injection" : "Set-Cookie value reflection (no breakout)";
+    }
     if (hdrLower.includes("content-security-policy")) return "CSP bypass";
     if (hdrLower.includes("access-control-allow-origin")) {
       return "CORS misconfiguration";
@@ -277,7 +280,10 @@ function generateTestPayload(
     if (hdrLower.includes("location") || hdrLower.includes("refresh")) {
       return redirectTestPayload(redirectPosition, chars);
     }
-    if (hdrLower.includes("set-cookie")) return `; domain=attacker.com`;
+    if (hdrLower.includes("set-cookie")) {
+      return (chars.includes(';') || chars.includes('\r') || chars.includes('\n'))
+        ? `; domain=attacker.com` : undefined;
+    }
     return undefined;
   }
   return undefined;
