@@ -5,12 +5,15 @@ type SDK = any;
 import { randomValue, findMatches } from "../../utils/text.js";
 import { mutateParamValue } from "../../utils/query.js";
 import { passesContentTypeGating } from "../../utils/http.js";
+import { ConfigStore } from "../../stores/configStore.js";
 import { allowedDetectionContextsFor, isLiteralContext } from "../../utils/contexts.js";
 import { classifySeverity } from "../scoring.js";
 import { prettyPrintContext } from "../contextMap.js";
 import type { SeverityTier } from "../../core/types.js";
 import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
+import JsResponseBodyPayloadGenerator from "../../payload/jsResponseBodyPayloadGenerator.ts";
 import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
+import { isJsContentType } from "../../utils/http.js";
 
 export interface ProbeResult {
     confirmed: boolean;
@@ -118,7 +121,9 @@ export async function runProbes(
             const probe = await (sdk as any).requests.send(probeSpec);
             const ctHeader = probe.response.getHeader('Content-Type');
             const nosniffHeader = probe.response.getHeader('X-Content-Type-Options');
-            if (!passesContentTypeGating(ctHeader, nosniffHeader)) {
+            const probeCtGated = passesContentTypeGating(ctHeader, nosniffHeader)
+                || (ConfigStore.getCheckJsResponseReflections() && isJsContentType(ctHeader));
+            if (!probeCtGated) {
                 sdk.console.log('[Reflector++] Probe response content-type gating failed, skipping batch');
                 continue;
             }
@@ -133,8 +138,11 @@ export async function runProbes(
                 : typeof ctHeader === "string" && ctHeader.trim() !== "" ? ctHeader : "";
             const contentType = normalizedContentType.toLowerCase();
             const isJsonResponse = contentType.startsWith("application/json");
+            const isJsResponse = isJsContentType(contentType);
             const detectPg = isJsonResponse
                 ? new JsonResponseBodyPayloadGenerator(probeBody)
+                : isJsResponse
+                ? new JsResponseBodyPayloadGenerator(probeBody)
                 : new ResponseBodyPayloadGenerator(probeBody);
             for (const m of markers) {
                 sdk.console.log(`[Reflector++] Analysing probe results for marker "${m.ch}"`);
@@ -187,7 +195,9 @@ export async function runProbes(
                 const probe = await (sdk as any).requests.send(probeSpec);
                 const probeBody =
                     probe.response.getBody()?.toText() || '';
-                const pg = new ResponseBodyPayloadGenerator(probeBody);
+                const pg = isJsContentType(probe.response.getHeader('Content-Type'))
+                    ? new JsResponseBodyPayloadGenerator(probeBody)
+                    : new ResponseBodyPayloadGenerator(probeBody);
                 if (pg.isInScriptOutsideString(suf)) {
                     sdk.console.log(
                         `[Reflector++] Combo \\${enclosingQuote}`

@@ -6,6 +6,7 @@ const ENABLED_STORAGE_KEY = "enabled"
 const PROBE_OOS_STORAGE_KEY = "probeOutOfScope"
 const LOG_UNCONFIRMED_FINDINGS_STORAGE_KEY = "logUnconfirmedFindings"
 const CHECK_HEADER_REFLECTIONS_STORAGE_KEY = "checkResponseHeaderReflections"
+const CHECK_JS_RESPONSE_REFLECTIONS_STORAGE_KEY = "checkJsResponseReflections"
 const CONTENT_TYPES_STORAGE_KEY = "noSniffContentTypes"
 const PATH_BLOCKLIST_STORAGE_KEY = "pathBlocklist"
 
@@ -66,6 +67,15 @@ export class PluginSettings {
     public async setCheckResponseHeaderReflections(value: boolean): Promise<void> {
         await this.sdk.backend.setCheckResponseHeaderReflections(value);
         return this.set<boolean>(CHECK_HEADER_REFLECTIONS_STORAGE_KEY, value);
+    }
+
+    public getCheckJsResponseReflections(): boolean {
+        return this.get<boolean>(CHECK_JS_RESPONSE_REFLECTIONS_STORAGE_KEY, true);
+    }
+
+    public async setCheckJsResponseReflections(value: boolean): Promise<void> {
+        await this.sdk.backend.setCheckJsResponseReflections(value);
+        return this.set<boolean>(CHECK_JS_RESPONSE_REFLECTIONS_STORAGE_KEY, value);
     }
 
     public getLogUnconfirmedFindings(): boolean {

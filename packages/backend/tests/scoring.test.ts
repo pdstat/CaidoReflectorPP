@@ -635,4 +635,37 @@ describe("classifySeverity", () => {
       confirmed: true, allowedChars: [], context: 'dataUri'
     })).toBe('medium');
   });
+
+  // Standalone JavaScript responses: a "</script>" tag-escape cannot break out of an
+  // externally-loaded script (the browser parses it as JS, never HTML), so those
+  // criticals are suppressed. A JS-string quote breakout is still live code execution.
+  test("inline <script> code with tag-escape stays critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<', '/'], context: 'Script'
+    })).toBe('critical');
+  });
+
+  test("JS response: tag-escape in script code is high, not critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<', '/'], context: 'Script', isJsResponse: true
+    })).toBe('high');
+  });
+
+  test("JS response: tag-escape inside a JS string is high, not critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<', '/'], context: 'Script String (")', isJsResponse: true
+    })).toBe('high');
+  });
+
+  test("JS response: quote breakout out of a JS string stays critical", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"'], context: 'Script String (")', isJsResponse: true
+    })).toBe('critical');
+  });
+
+  test("JS response: code position with a breakout char is high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: [';'], context: 'Script', isJsResponse: true
+    })).toBe('high');
+  });
 });

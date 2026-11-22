@@ -1,6 +1,7 @@
 import { RequestParameter } from "../../core/types.js";
 import { randomValue, computeKeywordCounts } from "../../utils/text.js";
-import { buildEndpoint, passesContentTypeGating } from "../../utils/http.js";
+import { buildEndpoint, passesContentTypeGating, isJsContentType } from "../../utils/http.js";
+import { ConfigStore } from "../../stores/configStore.js";
 import { errorParamsStore } from "../../stores/errorStore.js";
 import { mutateParamValue } from "../../utils/query.js";
 import { KEY_WORDS } from "../../core/constants.js";
@@ -45,7 +46,9 @@ export const modifyAmbiguousParameters = async (
   const isStableLikeBaseline = (probe: any): boolean => {
     const ctHeader = probe.response.getHeader("Content-Type");
     const nosniffHeader = probe.response.getHeader("X-Content-Type-Options");
-    if (!passesContentTypeGating(ctHeader, nosniffHeader)) return false;
+    const ctGated = passesContentTypeGating(ctHeader, nosniffHeader)
+      || (ConfigStore.getCheckJsResponseReflections() && isJsContentType(ctHeader));
+    if (!ctGated) return false;
     const codeEqual = (probe.response.getCode?.() ?? 0) === baselineCode;
     if (!codeEqual) return false;
     const body = probe.response.getBody()?.toText() || "";

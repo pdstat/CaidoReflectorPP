@@ -1,5 +1,5 @@
 import { buildEndpoint } from '../src/utils/http.js';
-import { passesContentTypeGating } from '../src/utils/http.js';
+import { passesContentTypeGating, isJsContentType } from '../src/utils/http.js';
 
 import { ConfigStore } from "../src/stores/configStore.js";
 
@@ -26,6 +26,25 @@ describe('buildEndpoint', () => {
         };
         const endpoint = buildEndpoint(req);
         expect(endpoint).toBe('https://secure.example.com/secure');
+    });
+});
+
+describe('isJsContentType', () => {
+    test('recognizes JS content types regardless of params/case', () => {
+        expect(isJsContentType('application/javascript')).toBe(true);
+        expect(isJsContentType('text/javascript; charset=UTF-8')).toBe(true);
+        expect(isJsContentType('Application/X-JavaScript')).toBe(true);
+        expect(isJsContentType(['text/javascript'])).toBe(true);
+    });
+    test('rejects non-JS content types', () => {
+        expect(isJsContentType('text/html')).toBe(false);
+        expect(isJsContentType('application/json')).toBe(false);
+        expect(isJsContentType(undefined)).toBe(false);
+        expect(isJsContentType('')).toBe(false);
+    });
+    test('does not pass standard content-type gating (JS is handled separately)', () => {
+        expect(passesContentTypeGating('application/javascript', undefined)).toBe(false);
+        expect(passesContentTypeGating('text/javascript', undefined)).toBe(false);
     });
 });
 

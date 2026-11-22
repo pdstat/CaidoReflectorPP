@@ -13,6 +13,24 @@ export const buildEndpoint = (obj: any) => {
   return (getTls ? 'https://' : 'http://') + host + path;
 };
 
+// Standalone JavaScript responses. Not HTML-sniffable, so passesContentTypeGating
+// rejects them, but their body is a prime reflected-XSS context (JSONP callbacks,
+// inline config). Gated separately behind the checkJsResponseReflections toggle.
+const JS_CONTENT_TYPES = new Set<string>([
+  'application/javascript', 'text/javascript', 'application/x-javascript',
+  'application/ecmascript', 'text/ecmascript',
+]);
+
+export const isJsContentType = (
+  rawContentType: string | string[] | undefined
+): boolean => {
+  let ct: string | undefined;
+  if (Array.isArray(rawContentType)) ct = rawContentType.find(v => v && v.trim() !== '');
+  else if (typeof rawContentType === 'string' && rawContentType.trim() !== '') ct = rawContentType;
+  const base = ct?.split(';')[0].trim().toLowerCase();
+  return !!base && JS_CONTENT_TYPES.has(base);
+};
+
 // Content-type gating (HTML-like or sniffable with missing headers)
 export const passesContentTypeGating = (
   rawContentType: string | string[] | undefined,
