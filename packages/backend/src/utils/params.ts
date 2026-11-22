@@ -32,18 +32,20 @@ const MAX_JSON_DEPTH = 5;
 
 const MIN_PATH_SEGMENT_LEN = 4;
 
+// Structural path segments only: infrastructure, build/asset dirs, framework
+// names, and JS literals -- segments that are route plumbing, never a
+// meaningful reflection target. Application words (search, admin, login, user,
+// config, page, ...) are deliberately NOT skipped: a reflected app segment is
+// a real finding, and the Path count-probe already suppresses natural-word
+// false positives (a segment that only appears as page text reflects 0 times).
 const COMMON_PATH_SEGMENTS = new Set([
   'api', 'app', 'www', 'web', 'src', 'lib', 'bin',
   'css', 'img', 'font', 'fonts', 'dist', 'build',
   'static', 'assets', 'public', 'images', 'scripts',
-  'styles', 'index', 'login', 'admin', 'home', 'page',
-  'pages', 'user', 'users', 'auth', 'test', 'docs',
-  'help', 'blog', 'post', 'posts', 'tags', 'tag',
-  'categories', 'category', 'search', 'about', 'contact',
+  'styles', 'index',
   'null', 'true', 'false', 'undefined',
   'next', 'react', 'vue', 'angular', 'svelte', 'node',
   'modules', 'components', 'views', 'layout', 'layouts',
-  'config', 'settings', 'overview', 'guide', 'getting-started',
 ]);
 
 interface JsonSubParam {
