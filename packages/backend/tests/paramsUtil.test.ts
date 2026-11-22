@@ -217,6 +217,22 @@ describe('enumerateRequestParameters', () => {
     expect(headerParams[0].key).toBe('header:X-Good');
   });
 
+  test('header length gate boundary: >=4 chars tracked, <=3 skipped', () => {
+    const sdk = makeSdk();
+    const spec = uniqueSpec({
+      headers: {
+        'X-Three': ['abc'],      // 3 chars -> skipped
+        'X-Four': ['abcd'],      // 4 chars -> tracked (e.g. a short lang/IP value)
+        'X-Five': ['en-US'],     // 5 chars -> tracked
+      }
+    });
+    const keys = enumerateRequestParameters(spec, sdk, 200, false)
+      .filter(p => p.source === 'Header').map(p => p.key);
+    expect(keys).toContain('header:X-Four');
+    expect(keys).toContain('header:X-Five');
+    expect(keys).not.toContain('header:X-Three');
+  });
+
   test('enumerates URL path segments as Path source', () => {
     const sdk = makeSdk();
     const spec = uniqueSpec({ path: '/api/myvalue123' });
