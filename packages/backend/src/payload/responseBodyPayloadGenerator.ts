@@ -50,29 +50,39 @@ const ResponseBodyPayloadGenerator = class {
 			}
 		});
 		if (!found && this.body.includes(marker)) {
-			found = !this._isInsideExcludedBlock(marker, Array.from(skip));
+			found = !this._noTextOccurrence(marker, Array.from(skip));
 		}
 		return found;
 	}
 
-	private _isInsideExcludedBlock(marker: string, exclude: string[]): boolean {
+	// True when no occurrence of the marker is page text: each one sits inside an excluded
+	// element (script/style/...) or -- for a "<" marker -- inside a start tag's attribute
+	// value, where a raw "<" cannot open a tag. Other chars (notably quotes) inside a value
+	// can still end it, so they keep counting.
+	private _noTextOccurrence(marker: string, exclude: string[]): boolean {
 		const bodyLC = this.body.toLowerCase();
 		const markerLC = marker.toLowerCase();
+		// Lowercasing can change length for some non-ASCII chars; only then are bodyLC
+		// offsets unusable as body offsets for the attribute-value check.
+		const checkAttrValue = marker.includes("<") && bodyLC.length === this.body.length;
 		let pos = bodyLC.indexOf(markerLC);
 		while (pos !== -1) {
-			let inside = false;
-			for (const tag of exclude) {
-				const open = `<${tag.toLowerCase()}`;
-				const close = `</${tag.toLowerCase()}>`;
-				const lastOpen = bodyLC.lastIndexOf(open, pos);
-				if (lastOpen === -1) continue;
-				const lastClose = bodyLC.lastIndexOf(close, pos);
-				if (lastClose < lastOpen) { inside = true; break; }
-			}
-			if (!inside) return false;
+			const where = checkAttrValue ? this._tagPositionAt(pos) : "text";
+			const inAttrValue = where === "quoted" || where === "unquoted";
+			if (!inAttrValue && !this._insideElement(bodyLC, pos, exclude)) return false;
 			pos = bodyLC.indexOf(markerLC, pos + 1);
 		}
 		return true;
+	}
+
+	private _insideElement(bodyLC: string, pos: number, tags: string[]): boolean {
+		for (const tag of tags) {
+			const lastOpen = bodyLC.lastIndexOf(`<${tag.toLowerCase()}`, pos);
+			if (lastOpen === -1) continue;
+			const lastClose = bodyLC.lastIndexOf(`</${tag.toLowerCase()}>`, pos);
+			if (lastClose < lastOpen) return true;
+		}
+		return false;
 	}
 
 	private _htmlEntityDecode(s: string): string {

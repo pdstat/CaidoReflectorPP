@@ -9,6 +9,7 @@ import requotedAttrFixture from "./requoted-unquoted-attr.fixture.ts";
 import jsResponseLtFixture from "./js-response-string-lt.fixture.ts";
 import jsCommentFixture from "./js-response-comment.fixture.ts";
 import unquotedNoBreakoutFixture from "./unquoted-attr-no-breakout.fixture.ts";
+import quotedAttrRawLtFixture from "./quoted-attr-raw-lt.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -117,6 +118,13 @@ describe("replay harness", () => {
     const f = body.find((p) => p.name === "iid");
     expect(f?.confirmed ?? false).toBe(false);
     expect(f?.severity ?? "info").toBe("info");
+  });
+
+  test("a raw < inside a sealed quoted attribute is not escalated to HTML (FP class fixed)", async () => {
+    const { body } = await runFixture(quotedAttrRawLtFixture);
+    const f = body.find((p) => p.name === "ref");
+    expect(f?.context ?? "").not.toBe("HTML");
+    expect(["high", "critical"]).not.toContain(f?.severity ?? "info");
   });
 
   test("the replay prober models the server transformation (escape map applied)", async () => {

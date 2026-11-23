@@ -1344,3 +1344,41 @@ describe("unquoted attribute: the reflection must stay unquoted", () => {
         expect(d.map((x) => x.context)).toContain("attribute");
     });
 });
+
+describe("raw < inside an attribute value is not HTML text", () => {
+    const ctx = ["html", "attributeInQuote", "attribute"];
+    const ctxs = (body: string) => det(body, ctx, "AAAAA", "<", "BBBBB").map((x) => x.context);
+
+    test("double-quoted attribute value", () => {
+        expect(ctxs(`<p>x</p><input type=hidden value="AAAAA<BBBBB"><p>y</p>`)).not.toContain("html");
+    });
+
+    test("single-quoted attribute value", () => {
+        expect(ctxs(`<p>x</p><input value='AAAAA<BBBBB'><p>y</p>`)).not.toContain("html");
+    });
+
+    test("unquoted attribute value", () => {
+        expect(ctxs(`<p>x</p><input type=hidden value=AAAAA<BBBBB><p>y</p>`)).not.toContain("html");
+    });
+
+    test("a raw < in flow text is still html", () => {
+        expect(ctxs(`<p>AAAAA<BBBBB</p>`)).toContain("html");
+    });
+
+    test("a batch marker after an earlier raw < (bogus tag) is still html", () => {
+        const body = `<p>PPPPP<QQQQQAAAAA<BBBBB</p>`;
+        expect(ctxs(body)).toContain("html");
+    });
+
+    test("a text copy still counts when another copy sits in an attribute", () => {
+        expect(ctxs(`<input value="AAAAA<BBBBB"><p>AAAAA<BBBBB</p>`)).toContain("html");
+    });
+});
+
+describe("quote inside an attribute value keeps counting", () => {
+    test("a raw \" ending a quoted style value is still detected", () => {
+        const body = `<div class="theme" style="color: AAAAA"BBBBB">Themed</div>`;
+        const d = det(body, ["html", "attributeInQuote"], "AAAAA", '"', "BBBBB").map((x) => x.context);
+        expect(d).toContain("html");
+    });
+});
