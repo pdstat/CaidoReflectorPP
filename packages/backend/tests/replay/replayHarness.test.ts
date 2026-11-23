@@ -2,6 +2,7 @@ import { runFixture, buildReplaySdk, type ReplayFixture } from "./replayHarness.
 import exampleFixture from "./example.fixture.ts";
 import jsonBodyFixture from "./json-body.fixture.ts";
 import genericHeaderFixture from "./generic-header.fixture.ts";
+import scriptCloseFixture from "./script-close-escape.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -52,6 +53,16 @@ describe("replay harness", () => {
     const f = header.find((p) => p.name === "cb");
     expect(f).toBeDefined();
     expect(f!.confirmed).toBe(true);
+    expect(f!.severity).toBe("low");
+  });
+
+  test("an escaped </ sequence in a script string is not a script-tag breakout (FP class fixed)", async () => {
+    const { body } = await runFixture(scriptCloseFixture);
+    const f = body.find((p) => p.name === "_from");
+    expect(f).toBeDefined();
+    expect(f!.confirmed).toBe(true);
+    expect(/script string/i.test(f!.context)).toBe(true);
+    expect(f!.aggressive).not.toContain("<");
     expect(f!.severity).toBe("low");
   });
 
