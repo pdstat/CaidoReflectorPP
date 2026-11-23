@@ -30,7 +30,12 @@ const ResponseBodyPayloadGenerator = class {
 		}
 	}
 
+	// Script/style source is never element text: those contexts are detected separately,
+	// so their raw content must not count here even when the caller excludes nothing.
+	private static _NEVER_TEXT = ["SCRIPT", "STYLE"];
+
 	private _containsTextOutsideTags(marker: string, exclude: string[] = ["SCRIPT", "STYLE"]): boolean {
+		const skip = new Set([...exclude, ...ResponseBodyPayloadGenerator._NEVER_TEXT]);
 		let found = false;
 		this._walkNodes(this.root as any, (n: Node) => {
 			if (found) return;
@@ -39,11 +44,13 @@ const ResponseBodyPayloadGenerator = class {
 			if (isText) {
 				const parent = (n as any).parentNode as any | undefined;
 				const tag = parent?.rawTagName ? String(parent.rawTagName).toUpperCase() : "";
-				if (!exclude.includes(tag) && (n as any).text?.includes(marker)) found = true;
+				// rawText, not the entity-decoded text: "&lt;" in the source is not a literal "<".
+				const raw = (n as any).rawText ?? (n as any).text;
+				if (!skip.has(tag) && raw?.includes(marker)) found = true;
 			}
 		});
 		if (!found && this.body.includes(marker)) {
-			found = !this._isInsideExcludedBlock(marker, exclude);
+			found = !this._isInsideExcludedBlock(marker, Array.from(skip));
 		}
 		return found;
 	}

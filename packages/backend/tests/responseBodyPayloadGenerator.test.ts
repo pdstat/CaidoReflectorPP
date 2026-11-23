@@ -1275,3 +1275,31 @@ describe("isInScriptOutsideString", () => {
         expect(pg.isInScriptOutsideString("NEEDLE")).toBe(false);
     });
 });
+describe("entity-encoded HTML text is not a literal reflection", () => {
+    // Raw marker survives only inside a script JSON string; the HTML text copy is
+    // entity-encoded. The parser's decoded `.text` must not count as a raw "<".
+    const page = (pre: string, ch: string, enc: string, suf: string) =>
+        `<p>Results for <span>${pre}${enc}${suf}</span></p>`
+        + `<script>var q={"k":"${pre}${ch}${suf}"};</script>`;
+
+    test("&lt; in flow text does not yield an html context for <", () => {
+        const d = det(page("AAAAA", "<", "&lt;", "BBBBB"), ["html", "jsInQuote"], "AAAAA", "<", "BBBBB");
+        expect(d.map((x) => x.context)).not.toContain("html");
+    });
+
+    test("&amp; in flow text does not yield an html context for &", () => {
+        const d = det(page("AAAAA", "&", "&amp;", "BBBBB"), ["html", "jsInQuote"], "AAAAA", "&", "BBBBB");
+        expect(d.map((x) => x.context)).not.toContain("html");
+    });
+
+    test("a raw < in flow text still yields an html context", () => {
+        const d = det(page("AAAAA", "<", "<", "BBBBB"), ["html", "jsInQuote"], "AAAAA", "<", "BBBBB");
+        expect(d.map((x) => x.context)).toContain("html");
+    });
+
+    test("&lt; inside textarea does not yield rawtextElement", () => {
+        const body = `<textarea>AAAAA&lt;BBBBB</textarea><script>var q="AAAAA<BBBBB";</script>`;
+        const d = det(body, ["rawtextElement", "jsInQuote"], "AAAAA", "<", "BBBBB");
+        expect(d.map((x) => x.context)).not.toContain("rawtextElement");
+    });
+});
