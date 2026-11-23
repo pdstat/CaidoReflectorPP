@@ -8,6 +8,7 @@ import nestedJsonFixture from "./nested-json-script.fixture.ts";
 import requotedAttrFixture from "./requoted-unquoted-attr.fixture.ts";
 import jsResponseLtFixture from "./js-response-string-lt.fixture.ts";
 import jsCommentFixture from "./js-response-comment.fixture.ts";
+import unquotedNoBreakoutFixture from "./unquoted-attr-no-breakout.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -107,6 +108,13 @@ describe("replay harness", () => {
   test("a reflection inside a JS-response comment is not a code-position finding (FP class fixed)", async () => {
     const { body } = await runFixture(jsCommentFixture);
     const f = body.find((p) => p.name === "v");
+    expect(f?.confirmed ?? false).toBe(false);
+    expect(f?.severity ?? "info").toBe("info");
+  });
+
+  test("an unquoted attribute with no surviving space or > is not a confirmed finding (FP class fixed)", async () => {
+    const { body } = await runFixture(unquotedNoBreakoutFixture);
+    const f = body.find((p) => p.name === "iid");
     expect(f?.confirmed ?? false).toBe(false);
     expect(f?.severity ?? "info").toBe("info");
   });
