@@ -7,6 +7,7 @@ import encodedTextFixture from "./encoded-text-raw-script.fixture.ts";
 import nestedJsonFixture from "./nested-json-script.fixture.ts";
 import requotedAttrFixture from "./requoted-unquoted-attr.fixture.ts";
 import jsResponseLtFixture from "./js-response-string-lt.fixture.ts";
+import jsCommentFixture from "./js-response-comment.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -99,6 +100,13 @@ describe("replay harness", () => {
   test("a raw < inside a sealed string in a JS response is not reported (FP class fixed)", async () => {
     const { body } = await runFixture(jsResponseLtFixture);
     const f = body.find((p) => p.name === "id");
+    expect(f?.confirmed ?? false).toBe(false);
+    expect(f?.severity ?? "info").toBe("info");
+  });
+
+  test("a reflection inside a JS-response comment is not a code-position finding (FP class fixed)", async () => {
+    const { body } = await runFixture(jsCommentFixture);
+    const f = body.find((p) => p.name === "v");
     expect(f?.confirmed ?? false).toBe(false);
     expect(f?.severity ?? "info").toBe("info");
   });

@@ -67,3 +67,57 @@ describe("JsResponseBodyPayloadGenerator.isInScriptOutsideString()", () => {
         expect(new JsResponseBodyPayloadGenerator(`var x = "MARKER";`).isInScriptOutsideString("MARKER")).toBe(false);
     });
 });
+
+describe("JsResponseBodyPayloadGenerator comments", () => {
+    test("a char reflected inside a // line comment is not a code-position survivor", () => {
+        const body = `run();//# sourceMappingURL=https://x/sym.map?version=AAAAA/BBBBB&v=1\n//abc`;
+        expect(det(body, "AAAAA", "/", "BBBBB")).toEqual([]);
+    });
+
+    test("a char reflected inside a /* block */ comment is not a code-position survivor", () => {
+        const body = `/* build AAAAA;BBBBB */ run();`;
+        expect(det(body, "AAAAA", ";", "BBBBB")).toEqual([]);
+    });
+
+    test("code after a line comment ends is still code", () => {
+        const body = `// header\nAAAAA;BBBBB();`;
+        expect(det(body, "AAAAA", ";", "BBBBB").map((d) => d.context)).toEqual(["js"]);
+    });
+
+    test("code after a block comment closes is still code", () => {
+        const body = `/* a */ AAAAA;BBBBB();`;
+        expect(det(body, "AAAAA", ";", "BBBBB").map((d) => d.context)).toEqual(["js"]);
+    });
+
+    test("// inside a string literal is not a comment", () => {
+        const body = `var u = "https://x/AAAAA'BBBBB";`;
+        expect(det(body, "AAAAA", "'", "BBBBB").map((d) => d.context)).toEqual(["jsInQuote"]);
+    });
+
+    test("an apostrophe inside a comment does not flip later code into a string", () => {
+        const body = `// don't\nAAAAA;BBBBB();`;
+        expect(det(body, "AAAAA", ";", "BBBBB").map((d) => d.context)).toEqual(["js"]);
+    });
+
+    test("an escaped slash (regex /a\\/\\//) does not start a comment", () => {
+        const body = `var r = /a\\/\\//; AAAAA;BBBBB();`;
+        expect(det(body, "AAAAA", ";", "BBBBB").map((d) => d.context)).toEqual(["js"]);
+    });
+
+    test("isInScriptOutsideString is false inside a comment", () => {
+        const pg = new JsResponseBodyPayloadGenerator(`x();// NEEDLE`);
+        expect(pg.isInScriptOutsideString("NEEDLE")).toBe(false);
+    });
+});
+
+describe("JsResponseBodyPayloadGenerator line terminators", () => {
+    test("U+2028 ends a line comment", () => {
+        const body = `// note\u2028AAAAA;BBBBB();`;
+        expect(det(body, "AAAAA", ";", "BBBBB").map((d) => d.context)).toEqual(["js"]);
+    });
+
+    test("a space does not end a line comment", () => {
+        const body = `// note AAAAA;BBBBB();`;
+        expect(det(body, "AAAAA", ";", "BBBBB")).toEqual([]);
+    });
+});
