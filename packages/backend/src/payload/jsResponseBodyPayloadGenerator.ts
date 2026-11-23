@@ -21,21 +21,35 @@ const JsResponseBodyPayloadGenerator = class {
         return count % 2 === 1;
     }
 
-    // Quote char enclosing `index`, or "" when the position is in code.
-    private _stringQuoteAt(index: number): string {
-        let quote = "";
-        for (let i = 0; i < index && i < this.body.length; i += 1) {
-            const ch = this.body[i];
-            if (ch !== '"' && ch !== "'" && ch !== "`") continue;
-            if (this._isEscaped(i)) continue;
-            if (quote === "") quote = ch;
-            else if (quote === ch) quote = "";
+    // Lexical state at `index`: the enclosing quote char, "comment" inside a // or /* */
+    // comment, or "" when the position is in code. Regex literals are not tracked; an
+    // escaped "/" (as in /a\/\//) is never taken as a comment start.
+    private _lexStateAt(index: number): string {
+        const body = this.body;
+        let state = "";
+        for (let i = 0; i < index && i < body.length; i += 1) {
+            const ch = body[i];
+            if (state === "//") {
+                if (ch === "\n" || ch === "\r" || ch === "\u2028" || ch === "\u2029") state = "";
+            } else if (state === "/*") {
+                if (ch === "*" && body[i + 1] === "/") { state = ""; i += 1; }
+            } else if (state !== "") {
+                if (ch === state && !this._isEscaped(i)) state = "";
+            } else if (ch === '"' || ch === "'" || ch === "`") {
+                if (!this._isEscaped(i)) state = ch;
+            } else if (ch === "/" && (body[i + 1] === "/" || body[i + 1] === "*") && !this._isEscaped(i)) {
+                state = body[i + 1] === "/" ? "//" : "/*";
+                i += 1;
+            }
         }
-        return quote;
+        return state === "//" || state === "/*" ? "comment" : state;
     }
 
+    // Inside a comment the reflection is inert unless a line terminator / "*/" survives,
+    // which this probe set does not test, so a comment position yields no context.
     private _contextAt(index: number): string[] {
-        const quote = this._stringQuoteAt(index);
+        const quote = this._lexStateAt(index);
+        if (quote === "comment") return [];
         if (quote === "`") return ["jsTemplateLiteral"];
         if (quote === "'") return ["jsInQuote", "jsInSQuote"];
         if (quote === '"') return ["jsInQuote"];
@@ -112,7 +126,7 @@ const JsResponseBodyPayloadGenerator = class {
     public isInScriptOutsideString(marker: string): boolean {
         const idx = this.body.indexOf(marker);
         if (idx === -1) return false;
-        return this._stringQuoteAt(idx) === "";
+        return this._lexStateAt(idx) === "";
     }
 };
 
