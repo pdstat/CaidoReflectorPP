@@ -9,6 +9,7 @@ import { Reflector } from "@/types"
 const enabled = ref(true)
 const probeOutOfScope = ref(false)
 const checkResponseHeaderReflections = ref(true)
+const checkJsResponseReflections = ref(true)
 const logUnconfirmedFindings = ref(false)
 const noSniffContentTypes = ref<string>("")
 const pathBlocklist = ref<string>("")
@@ -64,11 +65,13 @@ onMounted(async () => {
     enabled.value = settings.getEnabled() === true
     probeOutOfScope.value = settings.getProbeOutOfScope() === true
     checkResponseHeaderReflections.value = settings.getCheckResponseHeaderReflections() === true
+    checkJsResponseReflections.value = settings.getCheckJsResponseReflections() === true
     logUnconfirmedFindings.value = settings.getLogUnconfirmedFindings() === true
     noSniffContentTypes.value = Array.from(settings.getNoSniffContentTypes()).sort().join("\n")
     pathBlocklist.value = settings.getPathBlocklist().join("\n")
     settings.setEnabled(enabled.value)
     settings.setCheckResponseHeaderReflections(checkResponseHeaderReflections.value)
+    settings.setCheckJsResponseReflections(checkJsResponseReflections.value)
     settings.setLogUnconfirmedFindings(logUnconfirmedFindings.value)
     settings.setProbeOutOfScope(probeOutOfScope.value)
     settings.setNoSniffContentTypes(settings.getNoSniffContentTypes())
@@ -91,6 +94,12 @@ watch(probeOutOfScope, async (v) => {
 watch(checkResponseHeaderReflections, async (v) => {
     if (loaded.value) {
         await settings.setCheckResponseHeaderReflections(v)
+    }
+})
+
+watch(checkJsResponseReflections, async (v) => {
+    if (loaded.value) {
+        await settings.setCheckJsResponseReflections(v)
     }
 })
 
@@ -144,6 +153,10 @@ watch(logUnconfirmedFindings, async (v) => {
                             <div class="flex items-center gap-2">
                                 <ToggleSwitch v-model="checkResponseHeaderReflections" :disabled="!loaded" />
                                 <label class="text-sm cursor-pointer select-none">Check for reflections in response headers</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <ToggleSwitch v-model="checkJsResponseReflections" :disabled="!loaded" />
+                                <label class="text-sm cursor-pointer select-none">Check for reflections in JavaScript responses (JSONP)</label>
                             </div>
                             <div class="flex items-center gap-2">
                                 <ToggleSwitch v-model="logUnconfirmedFindings" :disabled="!loaded" />

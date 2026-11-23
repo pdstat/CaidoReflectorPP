@@ -34,6 +34,7 @@ module.exports = {
   '^./contextResolution\\.js$': '<rootDir>/src/analysis/bodyReflection/contextResolution.ts',
   '^./encodedSignalDetection\\.js$': '<rootDir>/src/analysis/bodyReflection/encodedSignalDetection.ts',
   '^./bodyReflection/probes\\.js$': '<rootDir>/src/analysis/bodyReflection/probes.ts',
+  '^../../stores/configStore\\.js$': '<rootDir>/src/stores/configStore.ts',
   '^../../stores/errorStore\\.js$': '<rootDir>/src/stores/errorStore.ts',
   '^../../stores/paramStore\\.js$': '<rootDir>/src/stores/paramStore.ts',
   '^../utils/query\\.js$': '<rootDir>/src/utils/query.ts',

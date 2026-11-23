@@ -2,12 +2,13 @@
 type SDK = any; type HttpInput = any;
 import { AnalyzedReflectedParameter } from "../../core/types.js";
 import { findMatches, computeKeywordCounts } from "../../utils/text.js";
-import { buildEndpoint } from "../../utils/http.js";
+import { buildEndpoint, isJsContentType } from "../../utils/http.js";
 import { enumerateRequestParameters } from "../../utils/params.js";
 import { KEY_WORDS } from "../../core/constants.js";
 import { classifySeverity } from "../scoring.js";
 import { toCanonical, CONTEXT } from "../contextMap.js";
 import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
+import JsResponseBodyPayloadGenerator from "../../payload/jsResponseBodyPayloadGenerator.ts";
 import ResponseBodyPayloadGenerator from "../../payload/responseBodyPayloadGenerator.ts";
 import { getTags } from "./context.js";
 import { modifyAmbiguousParameters } from "./probes.js";
@@ -50,8 +51,13 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
   // Analyzed for reflections but NOT rendered as HTML by the browser (e.g. Next.js RSC
   // flight payloads), so any tag-injection there is not executable -- scored conservatively.
   const isNonRenderedBody = contentTypeBase === "text/x-component";
+  // Standalone JS response: the whole body is script. Classify by JS string state and
+  // score as JS execution (minus the HTML-tag-escape criticals an external script can't reach).
+  const isJsResponse = isJsContentType(rawContentType);
   const payloadGenerator = isJsonResponse
     ? new JsonResponseBodyPayloadGenerator(bodyText)
+    : isJsResponse
+    ? new JsResponseBodyPayloadGenerator(bodyText)
     : new ResponseBodyPayloadGenerator(bodyText);
   const baselineCode = response.getCode();
   const baselineBody = bodyText;
@@ -104,7 +110,7 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
     let allowedChars: string[] = [];
     if (isConfirmed) {
       allowedChars = Array.from(probeChars);
-      severity = classifySeverity({ confirmed: true, allowedChars, context: resolvedCtx, header: false });
+      severity = classifySeverity({ confirmed: true, allowedChars, context: resolvedCtx, header: false, isJsResponse });
       // Over-rate corrections: genuine reflections that are not executable as-is.
       // A 3xx body is not rendered (browsers follow the redirect) and an RSC flight body
       // is not HTML-rendered -- cap both at low. <template> content is inert until a script
@@ -123,6 +129,13 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
       const gateCanonical = toCanonical(resolvedCtx);
       const noBreakoutChar = !allowedChars.some(c => c !== "");
       if ((severity === 'low' || noBreakoutChar) && gateCanonical && NEEDS_BREAKOUT.has(gateCanonical)) {
+        isConfirmed = false;
+      }
+      // JS-response confirmed-breakout gate: a JS context is executable without a breakout
+      // for an inline <script>, but a standalone JS response reflects constantly on ad
+      // traffic (ids, macros). Require a real survivor there -- an inert reflection (only a
+      // non-breakout char, scored 'low') or none at all is suppressed, not reported.
+      if (isJsResponse && (severity === 'low' || noBreakoutChar)) {
         isConfirmed = false;
       }
     }

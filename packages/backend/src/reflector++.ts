@@ -2,7 +2,7 @@
 type HttpInput = any; type SDK = any; type Data = any;
 import { checkBodyReflections } from "./analysis/bodyReflection/bodyReflection.js";
 import { checkHeaderReflections } from "./analysis/headerReflection.js";
-import { buildEndpoint, passesContentTypeGating } from "./utils/http.js";
+import { buildEndpoint, passesContentTypeGating, isJsContentType } from "./utils/http.js";
 import { AnalyzedReflectedParameter, SEVERITY_ORDER } from "./core/types.js";
 import {
   generateReport,
@@ -69,7 +69,9 @@ export async function run(
     const rawNoSniff = response.getHeader("X-Content-Type-Options");
     let bodyReflections: ReflectedParameter[] = [];
     const proceedBody = (() => {
-        if (!passesContentTypeGating(rawContentType, rawNoSniff)) return false;
+        const ctGated = passesContentTypeGating(rawContentType, rawNoSniff)
+            || (ConfigStore.getCheckJsResponseReflections() && isJsContentType(rawContentType));
+        if (!ctGated) return false;
         const reqMethod = request.getMethod();
         if (reqMethod !== "GET" && reqMethod !== "POST") return false;
         if (analyticsHostsSet.has(request.getHost())) return false;

@@ -16,6 +16,8 @@ export class ConfigStore {
 
     private _checkPathSegmentReflections = true;
 
+    private _checkJsResponseReflections = true;
+
     private _noSniffContentTypes: Set<string> = new Set<string>();
 
     private _pathBlocklist: string[] = [];
@@ -58,6 +60,14 @@ export class ConfigStore {
 
     static setCheckPathSegmentReflections(value: boolean) {
         ConfigStore.instance._checkPathSegmentReflections = value;
+    }
+
+    static getCheckJsResponseReflections(): boolean {
+        return ConfigStore.instance._checkJsResponseReflections;
+    }
+
+    static setCheckJsResponseReflections(value: boolean) {
+        ConfigStore.instance._checkJsResponseReflections = value;
     }
 
     static getLogUnconfirmedFindings(): boolean {

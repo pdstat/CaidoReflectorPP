@@ -12,6 +12,12 @@ export interface SeverityInputs {
   headerNames?: string[];
   redirectPosition?: RedirectPosition;
   allowCredentials?: boolean;
+  // The reflection is in a standalone JavaScript response (application/javascript,
+  // text/javascript, ...), not inline in an HTML <script>. The browser parses it as
+  // script, never as HTML, so a "</script>" tag-escape cannot break out -- those
+  // critical paths are suppressed. A JS-string quote breakout is still live code
+  // execution and stays critical.
+  isJsResponse?: boolean;
 }
 
 const SCRIPT_CONTEXTS = new Set<string>([
@@ -83,19 +89,18 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   // Critical tier
   if (canonical === CONTEXT.RESPONSE_SPLITTING) return 'critical';
   if (canonical === CONTEXT.JS_URI) return 'critical';
+  const tagEscapeCritical = hasScriptTagEscape(chars) && !inp.isJsResponse;
   if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) {
-    if (hasExpressionHole(chars) || chars.includes('`')
-        || hasScriptTagEscape(chars)) {
+    if (hasExpressionHole(chars) || chars.includes('`') || tagEscapeCritical) {
       return 'critical';
     }
   }
   if (SCRIPT_CONTEXTS.has(canonical)) {
     const isString = canonical === CONTEXT.JS_IN_QUOTE;
-    if (isString && (hasQuoteBreakout(chars, inp.context)
-        || hasScriptTagEscape(chars))) {
+    if (isString && (hasQuoteBreakout(chars, inp.context) || tagEscapeCritical)) {
       return 'critical';
     }
-    if (!isString && hasScriptTagEscape(chars)) return 'critical';
+    if (!isString && tagEscapeCritical) return 'critical';
   }
   if (canonical === CONTEXT.EVENT_HANDLER && chars.length > 0) {
     return 'critical';
