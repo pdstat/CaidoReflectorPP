@@ -329,3 +329,28 @@ describe("classifyRedirectSeverity", () => {
     expect(classifyRedirectSeverity(undefined, ['='])).toBe('medium');
   });
 });
+
+describe("short-value host collision (canary resolves the true position)", () => {
+  // Server builds Location from a rurl param, then appends the top-level params.
+  // The controlled reflection is the trailing &gdpr=<value>, a query position.
+  const location =
+    "https://sync.1rx.io/usersync3/oneview//cookieval?zcc=0&sspret=1&gdpr=1&gdpr_consent=CQxyz&gdpr=VALUE";
+
+  test("re-searching a short value matches an incidental earlier occurrence (the trap)", () => {
+    // "1" first appears inside the host "1rx.io", so the value-based search mis-reads a
+    // trailing-query reflection as a subdomain-position one.
+    const loc = location.replace("gdpr=VALUE", "gdpr=1");
+    expect(detectRedirectPosition(loc, "1", "Location")).toBe("subdomain");
+  });
+
+  test("the unique canary reflects only at the controlled trailing-query position", () => {
+    const loc = location.replace("VALUE", "_HDR_CANARY_7weisdka");
+    expect(detectRedirectPosition(loc, "_HDR_CANARY_7weisdka", "Location")).toBe("query");
+  });
+
+  test("a canary that lands at the host start is still a real open redirect", () => {
+    expect(
+      detectRedirectPosition("https://_HDR_CANARY_7weisdka.evil.com/p", "_HDR_CANARY_7weisdka", "Location")
+    ).toBe("subdomain");
+  });
+});

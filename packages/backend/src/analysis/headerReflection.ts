@@ -43,7 +43,7 @@ export async function confirmHeaderReflection(
   param: RequestParameter,
   headerNames: string[],
   sdk: any
-): Promise<{ confirmed: string[]; allowedChars: string[]; crlf: boolean; }> {
+): Promise<{ confirmed: string[]; allowedChars: string[]; crlf: boolean; canary: string; probeHeaders: Record<string, string | string[]>; }> {
   const CANARY = `_HDR_CANARY_${Math.random().toString(36).slice(2, 10)}`;
   try {
     const requestSpec = originalRequest.toSpec();
@@ -64,8 +64,10 @@ export async function confirmHeaderReflection(
     const confirmed: string[] = [];
     let allowedChars: string[] = [];
     let crlf = false;
+    let probeHeaders: Record<string, string | string[]> = {};
     try {
       const newHeaders: Record<string, string | string[]> = (result.response as any).getHeaders ? (result.response as any).getHeaders() : {};
+      probeHeaders = newHeaders;
       const canaryLower = CANARY.toLowerCase();
       for (const h of headerNames) {
         const v = newHeaders[h];
@@ -80,10 +82,10 @@ export async function confirmHeaderReflection(
     } catch (e) {
       sdk.console.log(`[Reflector++] Error reading headers for confirmation: ${e}`);
     }
-    return { confirmed, allowedChars, crlf };
+    return { confirmed, allowedChars, crlf, canary: CANARY, probeHeaders };
   } catch (e) {
     sdk.console.log(`[Reflector++] Error confirming header reflection: ${e}`);
-    return { confirmed: [], allowedChars: [], crlf: false };
+    return { confirmed: [], allowedChars: [], crlf: false, canary: CANARY, probeHeaders: {} };
   }
 }
 
@@ -110,7 +112,7 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
       if (joined.includes(needle)) potential.push(name);
     }
     if (potential.length === 0) continue;
-    const { confirmed: confirmedHeaders, allowedChars, crlf } = await confirmHeaderReflection(request, param, potential, sdk);
+    const { confirmed: confirmedHeaders, allowedChars, crlf, canary, probeHeaders } = await confirmHeaderReflection(request, param, potential, sdk);
     if (confirmedHeaders.length > 0) {
       const syntheticMatches: Array<[number, number]> = confirmedHeaders.map((_, i) => [i, i]);
       const contextLabel = crlf ? "Response Splitting (CRLF)" : "Response Header";
@@ -120,11 +122,20 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
         for (const h of confirmedHeaders) {
           const hLower = h.toLowerCase();
           if (hLower === 'location' || hLower === 'refresh') {
-            const values = hdrs.get(h) ?? [];
-            if (values.length > 0) {
-              redirectPosition = detectRedirectPosition(
-                values[0], param.value, h
-              );
+            // Classify position from where the unique canary actually reflected in the
+            // probe response, not from a re-search of the original value. A short/common
+            // value (e.g. "1") can collide with incidental content earlier in the redirect
+            // URL (e.g. the "1" in host "1rx.io"), which would mis-read a trailing-query
+            // reflection as a host/subdomain breakout and over-rate the severity.
+            const probeVals = probeHeaders[h];
+            const probeValue = Array.isArray(probeVals) ? probeVals[0] : probeVals;
+            if (typeof probeValue === "string" && probeValue.toLowerCase().includes(canary.toLowerCase())) {
+              redirectPosition = detectRedirectPosition(probeValue, canary, h);
+            } else {
+              const values = hdrs.get(h) ?? [];
+              if (values.length > 0) {
+                redirectPosition = detectRedirectPosition(values[0], param.value, h);
+              }
             }
             break;
           }
