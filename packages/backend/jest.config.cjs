@@ -43,6 +43,7 @@ module.exports = {
   '^../../stores/baseTrackedParamStore\\.js$': '<rootDir>/src/stores/baseTrackedParamStore.ts',
   '^../../stores/trackedParam\\.js$': '<rootDir>/src/stores/trackedParam.ts',
     // Generic: map any .js import in src/ to .ts file
+    '^../../src/(.*)\.js$': '<rootDir>/src/$1.ts',
     '^../src/(.*)\.js$': '<rootDir>/src/$1.ts',
     '^../src/(.*)/(.*)\.js$': '<rootDir>/src/$1/$2.ts',
     '^../src/(.*)/(.*)/(.*)\.js$': '<rootDir>/src/$1/$2/$3.ts',
