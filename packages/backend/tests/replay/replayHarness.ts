@@ -32,9 +32,11 @@ export type EscapeMode = "raw" | "drop" | "htmlentity" | "backslash" | "percent"
 
 export interface ReflectionSpec {
   /** Where the reflected parameter comes from. */
-  source: "URL" | "Body";
-  /** The parameter name the value is carried in. */
+  source: "URL" | "Body" | "BodyJsonRaw";
+  /** The parameter name the value is carried in (URL/Body). */
   param: string;
+  /** For BodyJsonRaw: the JSON path to the reflected string leaf in the request body. */
+  jsonPath?: string[];
   /**
    * Response body with every occurrence of the reflected value replaced by the sentinel
    * `__REFLECT__`. The prober substitutes the (transformed) injected value back in.
@@ -112,8 +114,19 @@ const safeDecode = (v: string): string => {
   try { return decodeURIComponent(v.replace(/\+/g, "%20")); } catch { return v; }
 };
 
-/** Extract the current value of `param` from a mutated request spec. */
+/** Extract the current value of the reflected param from a mutated request spec. */
 const extractInjected = (spec: any, reflection: ReflectionSpec): string | undefined => {
+  if (reflection.source === "BodyJsonRaw") {
+    const body = spec.getBody?.()?.toText?.() || "";
+    try {
+      let target: any = JSON.parse(body);
+      for (const seg of reflection.jsonPath ?? []) {
+        target = target[/^\d+$/.test(seg) ? parseInt(seg, 10) : seg];
+        if (target == null) return undefined;
+      }
+      return typeof target === "string" ? target : undefined;
+    } catch { return undefined; }
+  }
   const raw = reflection.source === "Body"
     ? (spec.getBody?.()?.toText?.() || "")
     : (spec.getQuery?.() || "");

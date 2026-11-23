@@ -281,4 +281,37 @@ describe('enumerateRequestParameters', () => {
     expect(detail).toBeDefined();
     expect(detail!.key).toBe('path:2:detail');
   });
+
+  describe('raw application/json request body', () => {
+    test('enumerates string leaves as BodyJsonRaw with jsonPath', () => {
+      const body = JSON.stringify({
+        id: 'shortid', nested: { tag: 'fuse-slot-home' },
+        arr: ['x', 'longenoughvalue'], n: 42
+      });
+      const spec = uniqueSpec({ body, contentType: 'application/json' });
+      const out = enumerateRequestParameters(spec, makeSdk(), 200, false);
+      const bj = out.filter(p => p.source === 'BodyJsonRaw');
+      const byKey = Object.fromEntries(bj.map(p => [p.key, p]));
+      expect(byKey['body.id']?.value).toBe('shortid');
+      expect(byKey['body.nested.tag']?.value).toBe('fuse-slot-home');
+      expect(byKey['body.nested.tag']?.jsonPath).toEqual(['nested', 'tag']);
+      expect(byKey['body.arr[1]']?.value).toBe('longenoughvalue');
+      // short string ('x' < MIN_JSON_STRING_LEN) and the number are not enumerated
+      expect(byKey['body.arr[0]']).toBeUndefined();
+      expect(bj.some(p => p.value === '42')).toBe(false);
+    });
+
+    test('does not enumerate JSON body on GET (POST-only)', () => {
+      const spec: any = uniqueSpec({ body: JSON.stringify({ q: 'reflectme' }), contentType: 'application/json' });
+      spec.getMethod = () => 'GET';
+      const out = enumerateRequestParameters(spec, makeSdk(), 200, false);
+      expect(out.some(p => p.source === 'BodyJsonRaw')).toBe(false);
+    });
+
+    test('ignores a body that is not JSON despite the json content-type', () => {
+      const spec = uniqueSpec({ body: 'not json at all', contentType: 'application/json' });
+      const out = enumerateRequestParameters(spec, makeSdk(), 200, false);
+      expect(out.some(p => p.source === 'BodyJsonRaw')).toBe(false);
+    });
+  });
 });

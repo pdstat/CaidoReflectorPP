@@ -142,6 +142,57 @@ describe('query utilities', () => {
       expect(parts[2]).toBe('extra=x%26y');
     });
 
+    test('updates BodyJsonRaw value within a raw JSON request body', () => {
+      const spec = {
+        _body: JSON.stringify({ outer: { tag: 'orig' }, keep: 'untouched' }),
+        getBody() { return { toText: () => this._body }; },
+        setBody(v: string) { this._body = v; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '', setQuery: (_: string) => {},
+      } as any;
+      const param: RequestParameter = {
+        key: 'body.outer.tag', value: 'orig', source: 'BodyJsonRaw',
+        method: 'POST', code: 200, jsonPath: ['outer', 'tag']
+      };
+      mutateParamValue(spec, param, 'INJECTED', sdk());
+      const parsed = JSON.parse(spec._body);
+      expect(parsed.outer.tag).toBe('INJECTED');
+      expect(parsed.keep).toBe('untouched');
+    });
+
+    test('updates BodyJsonRaw value at an array index path', () => {
+      const spec = {
+        _body: JSON.stringify({ items: ['a', 'origvalue'] }),
+        getBody() { return { toText: () => this._body }; },
+        setBody(v: string) { this._body = v; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '', setQuery: (_: string) => {},
+      } as any;
+      const param: RequestParameter = {
+        key: 'body.items[1]', value: 'origvalue', source: 'BodyJsonRaw',
+        method: 'POST', code: 200, jsonPath: ['items', '1']
+      };
+      mutateParamValue(spec, param, 'XSS', sdk());
+      expect(JSON.parse(spec._body).items).toEqual(['a', 'XSS']);
+    });
+
+    test('BodyJsonRaw leaves body unchanged on a missing path', () => {
+      const original = JSON.stringify({ a: { b: 'v' } });
+      const spec = {
+        _body: original,
+        getBody() { return { toText: () => this._body }; },
+        setBody(v: string) { this._body = v; },
+        getHeader: (_: string) => undefined,
+        getQuery: () => '', setQuery: (_: string) => {},
+      } as any;
+      const param: RequestParameter = {
+        key: 'body.a.missing.deep', value: 'v', source: 'BodyJsonRaw',
+        method: 'POST', code: 200, jsonPath: ['a', 'missing', 'deep']
+      };
+      mutateParamValue(spec, param, 'NEW', sdk());
+      expect(spec._body).toBe(original);
+    });
+
     test('updates UrlJson value within JSON in query string', () => {
       const json = JSON.stringify({ user: { name: "orig" } });
       const query = `other=keep&config=${encodeURIComponent(json)}`;

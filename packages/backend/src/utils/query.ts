@@ -117,6 +117,23 @@ export const mutateParamValue = (
       if (mutated) requestSpec.setBody(rebuilt.join('&'));
       return;
     }
+    if (param.source === 'BodyJsonRaw' && param.jsonPath?.length) {
+      const bodyText = requestSpec.getBody()?.toText();
+      if (!bodyText) return;
+      try {
+        const json = JSON.parse(bodyText);
+        let target = json;
+        for (let i = 0; i < param.jsonPath.length - 1; i++) {
+          const seg = param.jsonPath[i];
+          target = target[/^\d+$/.test(seg) ? parseInt(seg, 10) : seg];
+          if (target == null) throw new Error('path not found');
+        }
+        const last = param.jsonPath[param.jsonPath.length - 1];
+        target[/^\d+$/.test(last) ? parseInt(last, 10) : last] = newValue;
+        requestSpec.setBody(JSON.stringify(json));
+      } catch { /* leave body unchanged on malformed JSON / missing path */ }
+      return;
+    }
     if (param.source === 'Body' && requestSpec.getBody()) {
       const bodyText = requestSpec.getBody()?.toText();
       if (!bodyText) return;

@@ -81,32 +81,36 @@ function extractJsonStringValues(
     return [];
   }
   if (typeof parsed !== 'object' || parsed === null) return [];
-  const results: JsonSubParam[] = [];
+  return collectJsonStringLeaves(parsed).map((leaf) => ({
+    key: `${parentKey}.${leaf.display}`,
+    value: leaf.value,
+    parentKey,
+    jsonPath: leaf.jsonPath
+  }));
+}
+
+interface JsonLeaf { display: string; value: string; jsonPath: string[]; }
+
+// Walk a parsed JSON value and collect its string leaves (path + value), bounded by the
+// same depth/count/length limits as extractJsonStringValues. Shared by the query/form-JSON
+// path (which URL-decodes first) and the raw application/json request-body path.
+function collectJsonStringLeaves(parsed: unknown): JsonLeaf[] {
+  const results: JsonLeaf[] = [];
   function walk(obj: unknown, path: string[], depth: number) {
     if (depth > MAX_JSON_DEPTH) return;
     if (results.length >= MAX_JSON_PARAMS) return;
     if (typeof obj === 'string') {
       if (obj.length >= MIN_JSON_STRING_LEN) {
-        const display = buildJsonPathDisplay(path);
-        results.push({
-          key: `${parentKey}.${display}`,
-          value: obj,
-          parentKey,
-          jsonPath: [...path]
-        });
+        results.push({ display: buildJsonPathDisplay(path), value: obj, jsonPath: [...path] });
       }
       return;
     }
     if (Array.isArray(obj)) {
-      for (let i = 0; i < obj.length; i++) {
-        walk(obj[i], [...path, String(i)], depth + 1);
-      }
+      for (let i = 0; i < obj.length; i++) walk(obj[i], [...path, String(i)], depth + 1);
       return;
     }
     if (typeof obj === 'object' && obj !== null) {
-      for (const [k, v] of Object.entries(obj)) {
-        walk(v, [...path, k], depth + 1);
-      }
+      for (const [k, v] of Object.entries(obj)) walk(v, [...path, k], depth + 1);
     }
   }
   walk(parsed, [], 0);
@@ -169,9 +173,35 @@ export function enumerateRequestParameters(requestOrSpec: any, sdk: any, respons
     }
   }
 
-  // Body (x-www-form-urlencoded only)
+  // Body
   if (method === 'POST' && spec.getBody?.()) {
     const bodyObj = spec.getBody(); const ct = spec.getHeader?.('Content-Type');
+    // Raw application/json body: walk the whole body and enumerate its string leaves. The
+    // plugin was blind to JSON APIs (RTB/GraphQL/etc.) that reflect request-body values.
+    if (ct && ct[0]?.includes('application/json')) {
+      const text = bodyObj.toText?.() ?? '';
+      const first = text.trimStart()[0];
+      if (first === '{' || first === '[') {
+        let parsed: unknown;
+        try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+        if (parsed && typeof parsed === 'object') {
+          for (const leaf of collectJsonStringLeaves(parsed)) {
+            const candidate: TrackedParam = {
+              key: `body.${leaf.display}`, value: leaf.value,
+              source: 'BodyJsonRaw', method, code: respCode
+            };
+            if (track) {
+              if (!candidate.key || store.paramTested(endpoint, candidate)) continue;
+              store.addParam(endpoint, candidate);
+            }
+            params.push({
+              key: `body.${leaf.display}`, value: leaf.value, source: 'BodyJsonRaw',
+              method, code: respCode, jsonPath: leaf.jsonPath
+            });
+          }
+        }
+      }
+    }
     if (ct && ct[0]?.includes('application/x-www-form-urlencoded')) {
       for (const pair of bodyObj.toText().split('&')) {
         if (!pair) continue; const eq = pair.indexOf('='); if (eq === -1) continue;

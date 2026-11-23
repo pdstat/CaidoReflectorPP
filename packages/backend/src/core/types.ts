@@ -1,4 +1,4 @@
-export type ParamSource = "URL" | "UrlJson" | "Cookie" | "Body" | "BodyJson" | "Header" | "Path";
+export type ParamSource = "URL" | "UrlJson" | "Cookie" | "Body" | "BodyJson" | "BodyJsonRaw" | "Header" | "Path";
 
 export type SeverityTier = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
