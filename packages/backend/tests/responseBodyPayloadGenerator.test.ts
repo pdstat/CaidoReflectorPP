@@ -1303,3 +1303,44 @@ describe("entity-encoded HTML text is not a literal reflection", () => {
         expect(d.map((x) => x.context)).not.toContain("rawtextElement");
     });
 });
+
+describe("unquoted attribute: the reflection must stay unquoted", () => {
+    const ctx = ["attribute"];
+
+    test("space surviving in an unquoted value is detected", () => {
+        const d = det(`<input type=hidden id=_a value=AAAAA BBBBB><p>x</p>`, ctx, "AAAAA", " ", "BBBBB");
+        expect(d.map((x) => x.context)).toContain("attribute");
+    });
+
+    test("> surviving mid-value in an unquoted value is detected", () => {
+        const d = det(`<input value=zzAAAAA>BBBBB>`, ctx, "AAAAA", ">", "BBBBB");
+        expect(d.map((x) => x.context)).toContain("attribute");
+    });
+
+    test("value re-quoted by the server once it contains a space is not a breakout", () => {
+        const d = det(`<input type=hidden id=_a value="AAAAA BBBBB"><form action=/x></form>`, ctx, "AAAAA", " ", "BBBBB");
+        expect(d.map((x) => x.context)).not.toContain("attribute");
+    });
+
+    test("single-quoted re-quoting is not a breakout either", () => {
+        const d = det(`<input value='AAAAA BBBBB'>`, ctx, "AAAAA", " ", "BBBBB");
+        expect(d.map((x) => x.context)).not.toContain("attribute");
+    });
+
+    test("re-quoted attribute copy plus a page-text copy is still not a breakout", () => {
+        const body = `<b>Reference ID: </b>AAAAA BBBBB<input type=hidden id=_iid value="AAAAA BBBBB">`;
+        const d = det(body, ctx, "AAAAA", " ", "BBBBB");
+        expect(d.map((x) => x.context)).not.toContain("attribute");
+    });
+
+    test("a batch marker landing in text after a real > breakout is still counted", () => {
+        const body = `<input value=PPPPP SSSSSAAAAA>BBBBBCCCCC;DDDDD><p>x</p>`;
+        const d = det(body, ctx, "CCCCC", ";", "DDDDD");
+        expect(d.map((x) => x.context)).toContain("attribute");
+    });
+
+    test("an earlier quoted attribute in the same tag does not confuse the state", () => {
+        const d = det(`<a title="x=y z" href=AAAAA BBBBB>t</a>`, ctx, "AAAAA", " ", "BBBBB");
+        expect(d.map((x) => x.context)).toContain("attribute");
+    });
+});

@@ -39,6 +39,8 @@ export interface EscapeSpec {
    * times (" and \ escaped per layer), e.g. 2 for a JSON string nested in a JS string literal.
    */
   jsonStringLayers?: number;
+  /** Last step: arbitrary server transform the declarative options cannot express. */
+  custom?: (value: string) => string;
 }
 
 export interface ReflectionSpec {
@@ -132,7 +134,7 @@ const applyEscape = (value: string, escape?: EscapeSpec): string => {
   for (const [seq, replacement] of Object.entries(escape?.sequences ?? {})) {
     out = out.split(seq).join(replacement);
   }
-  return out;
+  return escape?.custom ? escape.custom(out) : out;
 };
 
 const safeDecode = (v: string): string => {

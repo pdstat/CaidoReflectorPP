@@ -978,7 +978,8 @@ const ResponseBodyPayloadGenerator = class {
 		const _attrUnquotedChars = new Set([" ", '"', "'", ">", "<", ";", "="]);
 		if (ctx.context.includes("attribute")
 			&& _attrUnquotedChars.has(payload)) {
-			if (this._markerInAnyAttr(marker) || this.body.includes(marker)) {
+			if ((this._markerInAnyAttr(marker) || this.body.includes(marker))
+				&& !this._markerOnlyInQuotedAttrValues(marker)) {
 				out.push({ char: payload, context: "attribute" });
 			}
 		}
@@ -1118,6 +1119,50 @@ const ResponseBodyPayloadGenerator = class {
 			}
 		}
 		return this._markerInRawAttrFallback(marker);
+	}
+
+	// True when the marker shows up inside a QUOTED attribute value and never in an unquoted
+	// value or a tag's attribute area -- i.e. the server re-quoted the value (minifiers do
+	// this once it contains a space or quote), so a "surviving" char cannot end the value.
+	// Text-only occurrences are left to the caller: in a batch probe, markers after a real
+	// ">" breakout legitimately land in text.
+	private _markerOnlyInQuotedAttrValues(marker: string): boolean {
+		let quoted = false;
+		let pos = this.body.indexOf(marker);
+		while (pos !== -1) {
+			const where = this._tagPositionAt(pos);
+			if (where === "unquoted" || where === "tag") return false;
+			if (where === "quoted") quoted = true;
+			pos = this.body.indexOf(marker, pos + 1);
+		}
+		return quoted;
+	}
+
+	// Classifies body[pos] relative to the enclosing start tag: inside a quoted or unquoted
+	// attribute value, elsewhere in the tag (names/whitespace), or outside any tag (text).
+	private _tagPositionAt(pos: number): "quoted" | "unquoted" | "tag" | "text" {
+		const body = this.body;
+		const tagStart = body.lastIndexOf("<", pos);
+		if (tagStart === -1 || !/[a-z]/i.test(body[tagStart + 1] ?? "")) return "text";
+		let quote: '"' | "'" | "" | null = null;
+		for (let i = tagStart + 1; i < pos; i++) {
+			const ch = body[i];
+			if (quote === '"' || quote === "'") {
+				if (ch === quote) quote = null;
+			} else if (ch === ">") {
+				return "text";
+			} else if (quote === "") {
+				if (/\s/.test(ch)) quote = null;
+			} else if (ch === "=") {
+				let j = i + 1;
+				while (j < pos && /\s/.test(body[j])) j++;
+				const q = body[j];
+				if (j < pos && (q === '"' || q === "'")) { quote = q; i = j; }
+				else { quote = ""; i = j - 1; }
+			}
+		}
+		if (quote === null) return "tag";
+		return quote === "" ? "unquoted" : "quoted";
 	}
 
 	private _markerInRawAttrFallback(marker: string): boolean {
