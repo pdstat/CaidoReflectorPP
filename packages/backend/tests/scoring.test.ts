@@ -667,9 +667,29 @@ describe("classifySeverity", () => {
     })).toBe('high');
   });
 
-  test("JS response: tag-escape inside a JS string is high, not critical", () => {
+  test("JS response: tag-escape inside a JS string is inert (low)", () => {
+    // "<" cannot end a JS string or the script in a standalone JS response.
     expect(classifySeverity({
       confirmed: true, allowedChars: ['<', '/'], context: 'Script String (")', isJsResponse: true
+    })).toBe('low');
+  });
+
+  test("JS response: a non-enclosing quote plus < in a JS string stays low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ["'", '<', '/', '(', ')', ';'], context: 'Script String (")',
+      isJsResponse: true
+    })).toBe('low');
+  });
+
+  test("JS response: backslash in a JS string is still a high string escape", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['\\', '<'], context: 'Script String (")', isJsResponse: true
+    })).toBe('high');
+  });
+
+  test("inline <script>: lone < in a JS string stays high", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['<'], context: 'Script String (")'
     })).toBe('high');
   });
 

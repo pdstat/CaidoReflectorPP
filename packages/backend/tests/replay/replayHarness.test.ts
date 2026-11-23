@@ -6,6 +6,7 @@ import scriptCloseFixture from "./script-close-escape.fixture.ts";
 import encodedTextFixture from "./encoded-text-raw-script.fixture.ts";
 import nestedJsonFixture from "./nested-json-script.fixture.ts";
 import requotedAttrFixture from "./requoted-unquoted-attr.fixture.ts";
+import jsResponseLtFixture from "./js-response-string-lt.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -93,6 +94,13 @@ describe("replay harness", () => {
     const f = body.find((p) => p.name === "appName");
     expect(f?.severity ?? "info").not.toBe("high");
     expect(f?.aggressive ?? []).not.toContain(" ");
+  });
+
+  test("a raw < inside a sealed string in a JS response is not reported (FP class fixed)", async () => {
+    const { body } = await runFixture(jsResponseLtFixture);
+    const f = body.find((p) => p.name === "id");
+    expect(f?.confirmed ?? false).toBe(false);
+    expect(f?.severity ?? "info").toBe("info");
   });
 
   test("the replay prober models the server transformation (escape map applied)", async () => {

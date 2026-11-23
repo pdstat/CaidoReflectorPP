@@ -42,10 +42,12 @@ function hasQuoteBreakout(chars: string[], context?: string): boolean {
   return chars.includes('"') || chars.includes("'");
 }
 
-function hasStringEscape(chars: string[], context?: string): boolean {
+// A raw "<" escapes a JS string only via "</script>" in an inline script; in a standalone
+// JS response the browser never parses HTML, so it is inert there.
+function hasStringEscape(chars: string[], context?: string, isJsResponse?: boolean): boolean {
   if (hasQuoteBreakout(chars, context)) return true;
   if (chars.includes('\\')) return true;
-  if (hasTagEscape(chars)) return true;
+  if (hasTagEscape(chars) && !isJsResponse) return true;
   if (chars.includes('`')) {
     const quote = context ? enclosingQuote(context) : undefined;
     if (!quote) return true;
@@ -116,7 +118,7 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
     return 'low';
   }
   if (canonical === CONTEXT.JS_IN_QUOTE) {
-    if (hasStringEscape(chars, inp.context)) return 'high';
+    if (hasStringEscape(chars, inp.context, inp.isJsResponse)) return 'high';
     return 'low';
   }
   if (canonical === CONTEXT.JS) return 'high';
