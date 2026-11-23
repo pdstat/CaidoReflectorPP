@@ -23,6 +23,10 @@ jest.mock("../src/payload/responseBodyPayloadGenerator.js", () => {
       detect(_sdk: any, _opts: any, pre: string, ch: string, suf: string) {
         return mockDetectImpl(pre, ch, suf, this.body);
       }
+      isInScriptOutsideString(needle: string) {
+        const Real = jest.requireActual("../src/payload/responseBodyPayloadGenerator.js").default;
+        return new Real(this.body).isInScriptOutsideString(needle);
+      }
     }
   };
 });
@@ -621,6 +625,68 @@ describe("runProbes()", () => {
     );
     expect(result.confirmed).toBe(true);
     expect(result.successfulChars.has('<')).toBe(true);
+  });
+
+  describe("backslash+quote combo probe", () => {
+    // Server reflects the decoded "p" value into a double-quoted inline-script string.
+    function scriptSdk(transform: (v: string) => string, fail?: (v: string) => boolean) {
+      return buildSdk(async (spec: any) => {
+        const v = decodeURIComponent((spec.getQuery() as string).replace(/^p=/, ""));
+        if (fail?.(v)) throw new Error("network");
+        return { response: buildResponse(`abc<script>var x="${transform(v)}";</script>`) };
+      });
+    }
+
+    async function probeBackslash(sdk: any) {
+      mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+        body.includes(pre + ch + suf) ? [{ context: "jsInQuote", char: ch }] : []
+      );
+      const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches("abc", k, true).length).join(',');
+      return runProbes(
+        sdk,
+        buildRequestWrapper(buildRequestSpec()),
+        { key: "p", source: "URL", value: "orig" },
+        { context: ["jsInQuote"], payload: ["\\", '"', "'"] },
+        [],
+        200,
+        baselineSig,
+        "abc",
+        KEY_WORDS_LOCAL,
+        "Script String (\")"
+      );
+    }
+
+    // A lone "\" reaches the per-char check either raw (the flawed server below) or, for
+    // a properly escaping nested serializer, as a doubled copy the detector also accepts.
+    // Model the per-char probe seeing "\" by leaving a lone "\" raw unless it precedes '"'.
+    const escapesQuoteOnly = (v: string) => v.replace(/"/g, '\\"');
+    const escapesBoth = (v: string) => v.replace(/\\(?=")/g, "\\\\").replace(/"/g, '\\"');
+
+    test("adds the quote when \\\" defeats quote-only escaping", async () => {
+      const result = await probeBackslash(scriptSdk(escapesQuoteOnly));
+      expect(result.successfulChars.has('"')).toBe(true);
+      expect(result.successfulChars.has("\\")).toBe(true);
+    });
+
+    test("drops \\ when the combo stays sealed inside the string", async () => {
+      const result = await probeBackslash(scriptSdk(escapesBoth));
+      expect(result.confirmed).toBe(true);
+      expect(result.successfulChars.has("\\")).toBe(false);
+      expect(result.successfulChars.has('"')).toBe(false);
+      expect(result.successfulChars.has("'")).toBe(true);
+    });
+
+    test("keeps \\ when the combo response lacks the markers (blocked)", async () => {
+      const sdk = scriptSdk(v => (v.includes('\\"') ? "" : escapesBoth(v)));
+      const result = await probeBackslash(sdk);
+      expect(result.successfulChars.has("\\")).toBe(true);
+    });
+
+    test("keeps \\ when the combo probe throws", async () => {
+      const sdk = scriptSdk(escapesBoth, v => v.includes('\\"'));
+      const result = await probeBackslash(sdk);
+      expect(result.successfulChars.has("\\")).toBe(true);
+    });
   });
 
   describe("script-close combo probe", () => {

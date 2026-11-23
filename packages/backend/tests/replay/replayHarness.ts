@@ -34,6 +34,11 @@ export interface EscapeSpec {
   default?: EscapeMode;
   map?: Record<string, EscapeMode>;
   sequences?: Record<string, string>;
+  /**
+   * After the per-char pass and before `sequences`, JSON-string-escape the value this many
+   * times (" and \ escaped per layer), e.g. 2 for a JSON string nested in a JS string literal.
+   */
+  jsonStringLayers?: number;
 }
 
 export interface ReflectionSpec {
@@ -52,7 +57,7 @@ export interface ReflectionSpec {
   headerTemplates?: Record<string, string>;
   /**
    * Per-character transformation the server applies to the reflected value. `sequences`
-   * replaces multi-char sequences after the per-char pass (e.g. { "</": "\\u003C/" } for a
+   * replaces multi-char sequences last (e.g. { "</": "\\u003C/" } for a
    * serializer that escapes "</" while a lone "<" survives).
    */
   escape?: EscapeSpec;
@@ -123,6 +128,7 @@ const applyEscape = (value: string, escape?: EscapeSpec): string => {
   const def: EscapeMode = escape?.default ?? "raw";
   let out = "";
   for (const ch of value) out += transformChar(ch, map[ch] ?? def);
+  for (let i = 0; i < (escape?.jsonStringLayers ?? 0); i++) out = JSON.stringify(out).slice(1, -1);
   for (const [seq, replacement] of Object.entries(escape?.sequences ?? {})) {
     out = out.split(seq).join(replacement);
   }

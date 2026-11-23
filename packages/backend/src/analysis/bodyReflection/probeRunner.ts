@@ -84,6 +84,45 @@ function needsScriptCloseProbe(bestContext: string, chars: Set<string>): boolean
     return SCRIPT_TAG_ESCAPE_CONTEXTS.has(canonical);
 }
 
+// Header values are transmitted verbatim (not URL-decoded server-side), and Path
+// segments are encoded exactly once by mutateParamValue. Pre-encoding the probe char
+// here would leave it percent-encoded in the reflection (Header) or double-encoded
+// (Path), so the dangerous char never reflects raw and severity is under-reported.
+// URL/Body/Cookie are decoded once in transit, so they still need encoding here.
+function encodeForSource(param: any, raw: string): string {
+    const skipEncode = param.source === 'BodyJson' || param.source === 'BodyJsonRaw'
+        || param.source === 'UrlJson' || param.source === 'Header' || param.source === 'Path';
+    return skipEncode ? raw : encodeURIComponent(raw);
+}
+
+type ComboOutcome = 'breakout' | 'sealed' | 'inconclusive';
+
+// When "\" reflects in a JS string but the enclosing quote does not, test whether
+// "\"+quote bypasses the server's escaping (server escapes " to \" but not \, so
+// \" -> \\" = breakout). "sealed" means the markers reflected but stayed inside the
+// string; "inconclusive" (probe failed / markers absent) must not change the verdict.
+async function backslashQuoteCombo(
+    sdk: SDK, request: any, param: any, quote: string
+): Promise<ComboOutcome> {
+    const pre = randomValue(5);
+    const suf = randomValue(5);
+    const probeSpec: any = request.toSpec();
+    mutateParamValue(probeSpec, param, pre + encodeForSource(param, '\\' + quote) + suf, sdk);
+    sdk.console.log(`[Reflector++] Combo probe \\${quote} for ${param.key}`);
+    try {
+        const probe = await sdk.requests.send(probeSpec);
+        const body: string = probe.response.getBody()?.toText() || '';
+        const pg = isJsContentType(probe.response.getHeader('Content-Type'))
+            ? new JsResponseBodyPayloadGenerator(body)
+            : new ResponseBodyPayloadGenerator(body);
+        if (pg.isInScriptOutsideString(suf)) return 'breakout';
+        return body.includes(pre) && body.includes(suf) ? 'sealed' : 'inconclusive';
+    } catch (e) {
+        sdk.console.log(`[Reflector++] Combo probe error: ${e}`);
+        return 'inconclusive';
+    }
+}
+
 // Sends "pre</script>suf" and reports whether the sequence came back escaped.
 // Returns false (keep "<") when the probe fails or the markers do not reflect at
 // all -- e.g. a WAF block -- so an inconclusive probe never downgrades a finding.
@@ -91,10 +130,8 @@ async function scriptCloseIsEscaped(sdk: SDK, request: any, param: any): Promise
     const seq = '</script>';
     const pre = randomValue(5);
     const suf = randomValue(5);
-    const skipEncode = param.source === 'BodyJson' || param.source === 'BodyJsonRaw'
-        || param.source === 'UrlJson' || param.source === 'Header' || param.source === 'Path';
     const probeSpec: any = request.toSpec();
-    mutateParamValue(probeSpec, param, pre + (skipEncode ? seq : encodeURIComponent(seq)) + suf, sdk);
+    mutateParamValue(probeSpec, param, pre + encodeForSource(param, seq) + suf, sdk);
     sdk.console.log(`[Reflector++] Script-close combo probe for ${param.key}`);
     try {
         const probe = await sdk.requests.send(probeSpec);
@@ -143,15 +180,9 @@ export async function runProbes(
     for (let i = 0; i < orderedPayload.length; i += BATCH) {
         const batch = orderedPayload.slice(i, i + BATCH);
         const markers = batch.map((ch: string) => ({ ch, pre: randomValue(5), suf: randomValue(5) }));
-        // Header values are transmitted verbatim (not URL-decoded server-side), and Path
-        // segments are encoded exactly once by mutateParamValue. Pre-encoding the probe char
-        // here would leave it percent-encoded in the reflection (Header) or double-encoded
-        // (Path), so the dangerous char never reflects raw and severity is under-reported.
-        // URL/Body/Cookie are decoded once in transit, so they still need encoding here.
-        const skipEncode = param.source === 'BodyJson' || param.source === 'BodyJsonRaw'
-            || param.source === 'UrlJson'
-            || param.source === 'Header' || param.source === 'Path';
-        const injected = markers.map((m: { ch: string; pre: string; suf: string }) => m.pre + (skipEncode ? m.ch : encodeURIComponent(m.ch)) + m.suf).join("");
+        const injected = markers
+            .map((m: { ch: string; pre: string; suf: string }) => m.pre + encodeForSource(param, m.ch) + m.suf)
+            .join("");
         const probeSpec: any = request.toSpec();
         mutateParamValue(probeSpec, param, injected, sdk as any);
         sdk.console.log(`[Reflector++] Probing ${param.key} with batch [${batch.join(', ')}]`);
@@ -212,43 +243,16 @@ export async function runProbes(
             }
         } catch (e) { (sdk as any).console.log(`[Reflector++] Probe error for ${param.key}: ${e}`); }
     }
-    // Combo probe: when \ reflects in a JS string but the enclosing
-    // quote does not, test if \+quote bypasses the server's escaping
-    // (e.g. server escapes " to \" but not \, so \" → \\" = breakout).
-    if (successfulChars.has('\\') && confirmed) {
-        const quoteMatch = bestContext.match(/\((['"])\)$/);
-        const enclosingQuote = quoteMatch?.[1];
-        if (enclosingQuote && !successfulChars.has(enclosingQuote)) {
-            const combo = '\\' + enclosingQuote;
-            const pre = randomValue(5);
-            const suf = randomValue(5);
-            const injected = pre + (param.source === 'BodyJson' || param.source === 'UrlJson' ? combo : encodeURIComponent(combo)) + suf;
-            const probeSpec: any = request.toSpec();
-            mutateParamValue(probeSpec, param, injected, sdk as any);
-            sdk.console.log(
-                `[Reflector++] Combo probe \\${enclosingQuote}`
-                + ` for ${param.key}`
-            );
-            try {
-                const probe = await (sdk as any).requests.send(probeSpec);
-                const probeBody =
-                    probe.response.getBody()?.toText() || '';
-                const pg = isJsContentType(probe.response.getHeader('Content-Type'))
-                    ? new JsResponseBodyPayloadGenerator(probeBody)
-                    : new ResponseBodyPayloadGenerator(probeBody);
-                if (pg.isInScriptOutsideString(suf)) {
-                    sdk.console.log(
-                        `[Reflector++] Combo \\${enclosingQuote}`
-                        + ` broke out of string for ${param.key}`
-                    );
-                    successfulChars.add(enclosingQuote);
-                }
-            } catch (e) {
-                (sdk as any).console.log(
-                    `[Reflector++] Combo probe error: ${e}`
-                );
-            }
-        }
+    // A "\" only matters in a quoted JS string if it defeats the quote escaping. Test
+    // that directly; when the markers reflect but stay sealed, the "\" seen by the
+    // per-char probe was an escaped (e.g. nested-serialized) copy, not a live one.
+    const enclosingQuote = bestContext.match(/\((['"])\)$/)?.[1];
+    if (confirmed && enclosingQuote && successfulChars.has('\\')
+        && !successfulChars.has(enclosingQuote)) {
+        const outcome = await backslashQuoteCombo(sdk, request, param, enclosingQuote);
+        if (outcome === 'breakout') successfulChars.add(enclosingQuote);
+        if (outcome === 'sealed') successfulChars.delete('\\');
+        sdk.console.log(`[Reflector++] Combo \\${enclosingQuote} for ${param.key}: ${outcome}`);
     }
     if (confirmed && needsScriptCloseProbe(bestContext, successfulChars)
         && await scriptCloseIsEscaped(sdk, request, param)) {
