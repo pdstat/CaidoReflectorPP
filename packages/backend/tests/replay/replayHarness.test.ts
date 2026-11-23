@@ -5,6 +5,7 @@ import genericHeaderFixture from "./generic-header.fixture.ts";
 import scriptCloseFixture from "./script-close-escape.fixture.ts";
 import encodedTextFixture from "./encoded-text-raw-script.fixture.ts";
 import nestedJsonFixture from "./nested-json-script.fixture.ts";
+import requotedAttrFixture from "./requoted-unquoted-attr.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -85,6 +86,13 @@ describe("replay harness", () => {
     expect(/script string/i.test(f!.context)).toBe(true);
     expect(f!.aggressive).not.toContain("\\");
     expect(f!.severity).toBe("low");
+  });
+
+  test("a value re-quoted once it contains a space is not an unquoted-attribute breakout (FP class fixed)", async () => {
+    const { body } = await runFixture(requotedAttrFixture);
+    const f = body.find((p) => p.name === "appName");
+    expect(f?.severity ?? "info").not.toBe("high");
+    expect(f?.aggressive ?? []).not.toContain(" ");
   });
 
   test("the replay prober models the server transformation (escape map applied)", async () => {
