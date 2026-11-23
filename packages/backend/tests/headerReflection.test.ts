@@ -205,6 +205,39 @@ describe("checkHeaderReflections", () => {
     expect(out.length).toBe(1);
     expectHeaderFinding(out[0], "p", ["X-Ref-Case"]);
   });
+
+  test("trailing-query redirect reflection stays low even when breakout chars survive (canary position)", async () => {
+    const req = makeRequest({ query: "p=abc123" });
+    // Server reflects the controlled value as a trailing query parameter, while the value
+    // also appears incidentally in the HOST ("abc123.cdn..."). The real position is query.
+    const sdk = {
+      console: { log: jest.fn() },
+      requests: {
+        send: async (spec: any) => {
+          const query = spec.getQuery?.() || "";
+          const headers: Record<string, string> = {
+            Location: `https://abc123.cdn.example.com/u?z=1&${query}`
+          };
+          return { response: { getCode: () => 200, getHeaders: () => headers } };
+        }
+      }
+    } as any;
+    // Baseline Location contains the original value "abc123" inside the host.
+    const response = makeResponse({ Location: "https://abc123.cdn.example.com/u?z=1&p=abc123" });
+    const out = await checkHeaderReflections(req as any, response as any, sdk);
+    expect(out.length).toBe(1);
+    const f = out[0];
+    expect(f.name).toBe("p");
+    expect(f.headers).toEqual(["Location"]);
+    // Resolved from the canary's true position, not the incidental host match.
+    expect(f.redirectPosition).toBe("query");
+    // Confirmed with surviving chars, yet still low: a query-position redirect reflection
+    // is unconditionally low (see classifyRedirectSeverity in redirectAnalysis.test.ts),
+    // so the rating is driven by position rather than the pre-fix host misclassification.
+    expect(f.confirmed).toBe(true);
+    expect(f.aggressive && f.aggressive.length).toBeTruthy();
+    expect(f.severity).toBe("low");
+  });
 });
 
 // ---------------------------------------------------------------------------
