@@ -8,7 +8,7 @@ import { passesContentTypeGating } from "../../utils/http.js";
 import { ConfigStore } from "../../stores/configStore.js";
 import { allowedDetectionContextsFor, isLiteralContext } from "../../utils/contexts.js";
 import { classifySeverity } from "../scoring.js";
-import { prettyPrintContext } from "../contextMap.js";
+import { CONTEXT, prettyPrintContext, toCanonical } from "../contextMap.js";
 import type { SeverityTier } from "../../core/types.js";
 import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
 import JsResponseBodyPayloadGenerator from "../../payload/jsResponseBodyPayloadGenerator.ts";
@@ -68,6 +68,43 @@ function severityOf(contextLabel: string, chars: Set<string>): SeverityTier {
         context: contextLabel,
         header: false,
     });
+}
+
+// Script contexts where a lone "<" only matters as the start of "</script". Many
+// serializers (Marko, Next.js, serialize-javascript, PHP json_encode) escape the
+// "</" sequence (or "/") while leaving a lone "<" and "/" raw, so per-char probes
+// see both survive although "</script>" never can.
+const SCRIPT_TAG_ESCAPE_CONTEXTS = new Set<string>([
+    CONTEXT.JS, CONTEXT.JS_IN_QUOTE, CONTEXT.JS_TEMPLATE_LITERAL,
+]);
+
+function needsScriptCloseProbe(bestContext: string, chars: Set<string>): boolean {
+    if (!chars.has('<')) return false;
+    const canonical = toCanonical(bestContext) ?? bestContext;
+    return SCRIPT_TAG_ESCAPE_CONTEXTS.has(canonical);
+}
+
+// Sends "pre</script>suf" and reports whether the sequence came back escaped.
+// Returns false (keep "<") when the probe fails or the markers do not reflect at
+// all -- e.g. a WAF block -- so an inconclusive probe never downgrades a finding.
+async function scriptCloseIsEscaped(sdk: SDK, request: any, param: any): Promise<boolean> {
+    const seq = '</script>';
+    const pre = randomValue(5);
+    const suf = randomValue(5);
+    const skipEncode = param.source === 'BodyJson' || param.source === 'BodyJsonRaw'
+        || param.source === 'UrlJson' || param.source === 'Header' || param.source === 'Path';
+    const probeSpec: any = request.toSpec();
+    mutateParamValue(probeSpec, param, pre + (skipEncode ? seq : encodeURIComponent(seq)) + suf, sdk);
+    sdk.console.log(`[Reflector++] Script-close combo probe for ${param.key}`);
+    try {
+        const probe = await sdk.requests.send(probeSpec);
+        const body: string = probe.response.getBody()?.toText() || '';
+        if (body.includes(pre + seq + suf)) return false;
+        return body.includes(pre) && body.includes(suf);
+    } catch (e) {
+        sdk.console.log(`[Reflector++] Script-close combo probe error for ${param.key}: ${e}`);
+        return false;
+    }
 }
 
 export function orderPayloadBreakoutFirst(payload: string[]): string[] {
@@ -212,6 +249,11 @@ export async function runProbes(
                 );
             }
         }
+    }
+    if (confirmed && needsScriptCloseProbe(bestContext, successfulChars)
+        && await scriptCloseIsEscaped(sdk, request, param)) {
+        sdk.console.log(`[Reflector++] "</script>" escaped for ${param.key}; dropping "<"`);
+        successfulChars.delete('<');
     }
     // Post-processing: In JSON string contexts where quote breakout
     // is impossible (" and \ both escaped), structural chars (, } ] :)

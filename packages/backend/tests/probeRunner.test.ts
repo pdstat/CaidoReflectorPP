@@ -622,6 +622,95 @@ describe("runProbes()", () => {
     expect(result.confirmed).toBe(true);
     expect(result.successfulChars.has('<')).toBe(true);
   });
+
+  describe("script-close combo probe", () => {
+    // Simulates a server that reflects the decoded "p" value through `transform`.
+    function reflectingSdk(transform: (v: string) => string) {
+      return buildSdk(async (spec: any) => {
+        const raw = (spec.getQuery() as string).replace(/^p=/, "");
+        return { response: buildResponse("abc" + transform(decodeURIComponent(raw))) };
+      });
+    }
+
+    async function probeScriptString(sdk: any, context = "Script String (\")") {
+      mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+        body.includes(pre + ch + suf) ? [{ context: "jsInQuote", char: ch }] : []
+      );
+      const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches("abc", k, true).length).join(',');
+      return runProbes(
+        sdk,
+        buildRequestWrapper(buildRequestSpec()),
+        { key: "p", source: "URL", value: "orig" },
+        { context: ["jsInQuote"], payload: ["<", "/", "'"] },
+        [],
+        200,
+        baselineSig,
+        "abc",
+        KEY_WORDS_LOCAL,
+        context
+      );
+    }
+
+    test("drops < when the server escapes the </ sequence (Marko-style \\u003C/)", async () => {
+      const sdk = reflectingSdk(v => v.replace(/<\//g, "\\u003C/"));
+      const result = await probeScriptString(sdk);
+      expect(result.confirmed).toBe(true);
+      expect(result.successfulChars.has("<")).toBe(false);
+      expect(result.successfulChars.has("/")).toBe(true);
+      expect(result.successfulChars.has("'")).toBe(true);
+    });
+
+    test("drops < when the server escapes / (json_encode-style <\\/)", async () => {
+      const sdk = reflectingSdk(v => v.replace(/\//g, "\\/"));
+      const result = await probeScriptString(sdk);
+      expect(result.successfulChars.has("<")).toBe(false);
+    });
+
+    test("keeps < when </script> reflects literally", async () => {
+      const sdk = reflectingSdk(v => v);
+      const result = await probeScriptString(sdk);
+      expect(result.successfulChars.has("<")).toBe(true);
+      expect(result.successfulChars.has("/")).toBe(true);
+    });
+
+    test("keeps < when the combo probe is blocked (markers absent)", async () => {
+      const sdk = reflectingSdk(v => (v.includes("</script>") ? "" : v));
+      const result = await probeScriptString(sdk);
+      expect(result.successfulChars.has("<")).toBe(true);
+    });
+
+    test("keeps < when the combo probe throws", async () => {
+      const sdk = buildSdk(async (spec: any) => {
+        const raw = decodeURIComponent((spec.getQuery() as string).replace(/^p=/, ""));
+        if (raw.includes("</script>")) throw new Error("network");
+        return { response: buildResponse("abc" + raw) };
+      });
+      const result = await probeScriptString(sdk);
+      expect(result.successfulChars.has("<")).toBe(true);
+    });
+
+    test("is not sent for an HTML context", async () => {
+      mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+        body.includes(pre + ch + suf) ? [{ context: "html", char: ch }] : []
+      );
+      const sdk = reflectingSdk(v => v.replace(/<\//g, "&lt;/"));
+      const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches("abc", k, true).length).join(',');
+      const result = await runProbes(
+        sdk,
+        buildRequestWrapper(buildRequestSpec()),
+        { key: "p", source: "URL", value: "orig" },
+        { context: ["html"], payload: ["<", "/"] },
+        [],
+        200,
+        baselineSig,
+        "abc",
+        KEY_WORDS_LOCAL,
+        "html"
+      );
+      expect(result.successfulChars.has("<")).toBe(true);
+      expect(sdk.requests.send).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe("orderPayloadBreakoutFirst()", () => {

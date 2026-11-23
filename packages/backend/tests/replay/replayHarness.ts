@@ -44,8 +44,16 @@ export interface ReflectionSpec {
   bodyTemplate?: string;
   /** Same idea for response headers (e.g. { Location: "https://h/p?x=__REFLECT__" }). */
   headerTemplates?: Record<string, string>;
-  /** Per-character transformation the server applies to the reflected value. */
-  escape?: { default?: EscapeMode; map?: Record<string, EscapeMode> };
+  /**
+   * Per-character transformation the server applies to the reflected value. `sequences`
+   * replaces multi-char sequences after the per-char pass (e.g. { "</": "\\u003C/" } for a
+   * serializer that escapes "</" while a lone "<" survives).
+   */
+  escape?: {
+    default?: EscapeMode;
+    map?: Record<string, EscapeMode>;
+    sequences?: Record<string, string>;
+  };
 }
 
 export interface ReplayFixture {
@@ -107,6 +115,9 @@ const applyEscape = (value: string, escape?: ReflectionSpec["escape"]): string =
   const def: EscapeMode = escape?.default ?? "raw";
   let out = "";
   for (const ch of value) out += transformChar(ch, map[ch] ?? def);
+  for (const [seq, replacement] of Object.entries(escape?.sequences ?? {})) {
+    out = out.split(seq).join(replacement);
+  }
   return out;
 };
 
