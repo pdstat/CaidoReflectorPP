@@ -200,7 +200,9 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   }
   if (canonical === CONTEXT.HTML_BASE_INJECTION) return 'medium';
   if (CSS_CONTEXTS.has(canonical)) return 'medium';
-  if (canonical === CONTEXT.ATTRIBUTE) return 'medium';
+  // Unquoted attribute without a surviving space or ">": nothing can end the value, so the
+  // reflection is sealed ("=", ";", quotes and "<" are inert inside it) -> low.
+  if (canonical === CONTEXT.ATTRIBUTE) return 'low';
   if (canonical === CONTEXT.JSON_STRUCTURE) return 'medium';
   if (canonical === CONTEXT.DATA_URI) return 'medium';
   if (canonical === CONTEXT.DOM_CLOBBER) return 'medium';

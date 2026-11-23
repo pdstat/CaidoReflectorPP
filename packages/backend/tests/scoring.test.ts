@@ -402,10 +402,16 @@ describe("classifySeverity", () => {
     })).toBe('high');
   });
 
-  test("confirmed unquoted attribute without breakout is medium", () => {
+  test("confirmed unquoted attribute without breakout is low (sealed)", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: ['='], context: 'attribute'
-    })).toBe('medium');
+    })).toBe('low');
+  });
+
+  test("unquoted attribute with only inert chars (quotes, <, ;) is low", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"', "'", '<', ';', '='], context: 'Tag Attribute (unquoted) Value'
+    })).toBe('low');
   });
 
   test("confirmed JSON structure is medium", () => {
