@@ -178,8 +178,11 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
     if (names.has('set-cookie')) {
       return hasCookieInjectionChars(chars) ? 'high' : 'low';
     }
-    if (names.has('content-security-policy')
-        && hasCSPBypassChars(chars)) return 'high';
+    // A CSP reflection is security-relevant: a bypass char (';', space, "'", '*', ':', '/')
+    // lets an attacker weaken the policy -> high; otherwise it still warrants medium.
+    if (names.has('content-security-policy')) {
+      return hasCSPBypassChars(chars) ? 'high' : 'medium';
+    }
     // A reflected Access-Control-Allow-Origin combined with Allow-Credentials: true
     // exposes authenticated data to an attacker-chosen origin -> critical. Without
     // credentials, the attacker can read only what any unauthenticated cross-origin
@@ -199,7 +202,12 @@ export function classifySeverity(inp: SeverityInputs): SeverityTier {
   if (canonical === CONTEXT.JSON_STRUCTURE) return 'medium';
   if (canonical === CONTEXT.DATA_URI) return 'medium';
   if (canonical === CONTEXT.DOM_CLOBBER) return 'medium';
-  if (inp.header) return 'medium';
+  // Generic (non-security) response headers: Location/Refresh/Set-Cookie/CSP/ACAO are scored
+  // in their own branches above. Any other header (Timing-Allow-Origin, Nexturl,
+  // Access-Control-Allow-Headers, vendor X-* headers, ...) is not an XSS or injection vector
+  // on its own -- response splitting via CR/LF is handled separately as its own context -- so
+  // a value echoed there is a low-severity reflection, not a medium one.
+  if (inp.header) return 'low';
 
   return 'low';
 }

@@ -245,6 +245,22 @@ describe("classifySeverity", () => {
     })).toBe('medium');
   });
 
+  test("inert generic (non-security) header reflection is low, not medium", () => {
+    for (const h of ['Timing-Allow-Origin', 'Nexturl', 'Access-Control-Allow-Headers', 'X-So-Lb-Data']) {
+      expect(classifySeverity({
+        confirmed: true, allowedChars: [],
+        context: 'Response Header', header: true, headerNames: [h]
+      })).toBe('low');
+    }
+  });
+
+  test("generic header reflection stays low even with surviving chars (not an XSS vector)", () => {
+    expect(classifySeverity({
+      confirmed: true, allowedChars: ['"', '<', '/'],
+      context: 'Response Header', header: true, headerNames: ['Timing-Allow-Origin']
+    })).toBe('low');
+  });
+
   // Position-aware Location header scoring
   test("Location full-url position is high regardless of chars", () => {
     expect(classifySeverity({
@@ -415,12 +431,12 @@ describe("classifySeverity", () => {
     })).toBe('critical');
   });
 
-  test("confirmed custom header is medium", () => {
+  test("confirmed custom (generic) header is low, not medium", () => {
     expect(classifySeverity({
       confirmed: true, allowedChars: [],
       context: 'Response Header', header: true,
       headerNames: ['X-Custom']
-    })).toBe('medium');
+    })).toBe('low');
   });
 
   test("confirmed HTML without < is low", () => {

@@ -1,6 +1,7 @@
 import { runFixture, buildReplaySdk, type ReplayFixture } from "./replayHarness.ts";
 import exampleFixture from "./example.fixture.ts";
 import jsonBodyFixture from "./json-body.fixture.ts";
+import genericHeaderFixture from "./generic-header.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -44,6 +45,14 @@ describe("replay harness", () => {
     expect(f!.confirmed).toBe(true);
     expect(/script/i.test(f!.context)).toBe(true);
     expect(f!.aggressive).toContain("'");
+  });
+
+  test("a generic-header reflection scores low end-to-end even with surviving chars", async () => {
+    const { header } = await runFixture(genericHeaderFixture);
+    const f = header.find((p) => p.name === "cb");
+    expect(f).toBeDefined();
+    expect(f!.confirmed).toBe(true);
+    expect(f!.severity).toBe("low");
   });
 
   test("the replay prober models the server transformation (escape map applied)", async () => {
