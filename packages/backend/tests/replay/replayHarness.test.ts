@@ -10,6 +10,7 @@ import jsResponseLtFixture from "./js-response-string-lt.fixture.ts";
 import jsCommentFixture from "./js-response-comment.fixture.ts";
 import unquotedNoBreakoutFixture from "./unquoted-attr-no-breakout.fixture.ts";
 import quotedAttrRawLtFixture from "./quoted-attr-raw-lt.fixture.ts";
+import jsEncodedInStringFixture from "./js-response-encoded-in-string.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -124,6 +125,13 @@ describe("replay harness", () => {
     const { body } = await runFixture(quotedAttrRawLtFixture);
     const f = body.find((p) => p.name === "ref");
     expect(f?.context ?? "").not.toBe("HTML");
+    expect(["high", "critical"]).not.toContain(f?.severity ?? "info");
+  });
+
+  test("a percent-encoded value inside a JS-response string is not code position (FP class fixed)", async () => {
+    const { body } = await runFixture(jsEncodedInStringFixture);
+    const f = body.find((p) => p.name === "eid");
+    expect(f?.context ?? "").not.toBe("Script");
     expect(["high", "critical"]).not.toContain(f?.severity ?? "info");
   });
 

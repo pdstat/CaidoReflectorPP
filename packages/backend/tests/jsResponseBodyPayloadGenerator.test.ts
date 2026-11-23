@@ -121,3 +121,23 @@ describe("JsResponseBodyPayloadGenerator line terminators", () => {
         expect(det(body, "AAAAA", ";", "BBBBB")).toEqual([]);
     });
 });
+
+describe("JsResponseBodyPayloadGenerator percent-encoded reflections", () => {
+    const body = `s.ss_(window,'x',['https://a.example/p?eid\\x3d375603261%2C466465926\\x26u\\x3d1']);`;
+
+    test("a value echoed still percent-encoded inside a string is jsInQuote, not code", () => {
+        const { context } = gen(body, "375603261,466465926");
+        expect(context).toContain("jsInQuote");
+        expect(context).not.toContain("js");
+    });
+
+    test("the raw (encoded) form of the value is matched too", () => {
+        const { context } = gen(body, "375603261%2C466465926");
+        expect(context).toContain("jsInQuote");
+        expect(context).not.toContain("js");
+    });
+
+    test("a value with no occurrence still falls back to js", () => {
+        expect(gen(`var a = 1;`, "nothere").context).toEqual(["js"]);
+    });
+});
