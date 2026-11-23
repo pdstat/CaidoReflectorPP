@@ -87,7 +87,13 @@ const JsResponseBodyPayloadGenerator = class {
         const payloadSet = new Set<string>(['"', "'", "`", "\\", "(", ")", ";", "<", "/", "{", "}", "$"]);
         const contextSet = new Set<string>();
         const markerBase = this._safeDecode(this._safeDecode(reflectedValue));
-        for (const marker of this._variantsOf(markerBase)) {
+        // Servers often echo the value still percent-encoded (e.g. "%2C" inside a URL in a
+        // string); without the encoded forms nothing matches and the context falls back to
+        // code position ("js") -- the most severe one -- with no evidence for it.
+        const candidates = new Set([
+            ...this._variantsOf(markerBase), reflectedValue, encodeURIComponent(markerBase),
+        ]);
+        for (const marker of candidates) {
             if (!marker) continue;
             let idx = -1;
             while ((idx = this.body.indexOf(marker, idx + 1)) !== -1) {
