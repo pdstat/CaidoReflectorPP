@@ -351,7 +351,7 @@ export function generateReport(
   let out = `### ${param.name} · ${pretty} · ${tier}\n`;
 
   const meta: string[] = [];
-  if (param.source) meta.push(`**Source:** ${param.source}`);
+  if (param.source) meta.push(`**Source:** ${param.source === "BodyJsonRaw" ? "Body" : param.source}`);
   if (param.value != null) {
     meta.push(`**Value:** \`${truncate(param.value, 60)}\``);
   }
@@ -459,7 +459,7 @@ export function buildStructuredDataBlock(
 ): string {
   const data = params.map(p => ({
     param: p.name,
-    source: p.source ?? "URL",
+    source: p.source === "BodyJsonRaw" ? "Body" : (p.source ?? "URL"),
     context: p.context,
     severity: p.severity,
     confirmed: p.confirmed,

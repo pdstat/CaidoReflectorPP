@@ -1,5 +1,6 @@
 import { runFixture, buildReplaySdk, type ReplayFixture } from "./replayHarness.ts";
 import exampleFixture from "./example.fixture.ts";
+import jsonBodyFixture from "./json-body.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -33,6 +34,16 @@ describe("replay harness", () => {
     const f = body.find((p) => p.name === "u");
     // Either suppressed entirely, or present only as unconfirmed/info -- never a confirmed hit.
     expect(f?.confirmed ?? false).toBe(false);
+  });
+
+  test("confirms a JSON request-body param reflected into a JS string (FN class fixed)", async () => {
+    const { body } = await runFixture(jsonBodyFixture);
+    const f = body.find((p) => p.name === "body.imp[0].tagid");
+    expect(f).toBeDefined();
+    expect(f!.source).toBe("BodyJsonRaw");
+    expect(f!.confirmed).toBe(true);
+    expect(/script/i.test(f!.context)).toBe(true);
+    expect(f!.aggressive).toContain("'");
   });
 
   test("the replay prober models the server transformation (escape map applied)", async () => {

@@ -111,7 +111,8 @@ export async function runProbes(
         // here would leave it percent-encoded in the reflection (Header) or double-encoded
         // (Path), so the dangerous char never reflects raw and severity is under-reported.
         // URL/Body/Cookie are decoded once in transit, so they still need encoding here.
-        const skipEncode = param.source === 'BodyJson' || param.source === 'UrlJson'
+        const skipEncode = param.source === 'BodyJson' || param.source === 'BodyJsonRaw'
+            || param.source === 'UrlJson'
             || param.source === 'Header' || param.source === 'Path';
         const injected = markers.map((m: { ch: string; pre: string; suf: string }) => m.pre + (skipEncode ? m.ch : encodeURIComponent(m.ch)) + m.suf).join("");
         const probeSpec: any = request.toSpec();
