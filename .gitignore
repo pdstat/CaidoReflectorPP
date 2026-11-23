@@ -66,6 +66,12 @@ http_dumps/
 # ---- Local scratch / experiments ----
 playground/
 
+# ---- finding-audit: local corpus, oracle, ledger (may contain real-target data) ----
+validation/
+
+# ---- finding-audit: captured real replay fixtures (never commit real traffic) ----
+packages/backend/tests/replay/fixtures/real/
+
 # ---- Claude Code ----
 .claude/
 .claudeignore
