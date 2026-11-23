@@ -30,6 +30,12 @@ export const DEFAULT_NO_SNIFF_CONTENT_TYPES = [
 
 export type EscapeMode = "raw" | "drop" | "htmlentity" | "backslash" | "percent";
 
+export interface EscapeSpec {
+  default?: EscapeMode;
+  map?: Record<string, EscapeMode>;
+  sequences?: Record<string, string>;
+}
+
 export interface ReflectionSpec {
   /** Where the reflected parameter comes from. */
   source: "URL" | "Body" | "BodyJsonRaw";
@@ -49,11 +55,13 @@ export interface ReflectionSpec {
    * replaces multi-char sequences after the per-char pass (e.g. { "</": "\\u003C/" } for a
    * serializer that escapes "</" while a lone "<" survives).
    */
-  escape?: {
-    default?: EscapeMode;
-    map?: Record<string, EscapeMode>;
-    sequences?: Record<string, string>;
-  };
+  escape?: EscapeSpec;
+  /**
+   * Extra sentinels for positions the server escapes differently from `escape`, e.g.
+   * { __REFLECT_HTML__: { map: { "<": "htmlentity" } } } for an HTML-text copy of a value
+   * that is JS-escaped elsewhere on the page. Must not contain `__REFLECT__` as a substring.
+   */
+  extraSentinels?: Record<string, EscapeSpec>;
 }
 
 export interface ReplayFixture {
@@ -110,7 +118,7 @@ const transformChar = (ch: string, mode: EscapeMode): string => {
   }
 };
 
-const applyEscape = (value: string, escape?: ReflectionSpec["escape"]): string => {
+const applyEscape = (value: string, escape?: EscapeSpec): string => {
   const map = escape?.map ?? {};
   const def: EscapeMode = escape?.default ?? "raw";
   let out = "";
@@ -149,8 +157,13 @@ const extractInjected = (spec: any, reflection: ReflectionSpec): string | undefi
   return undefined;
 };
 
-const substitute = (template: string, injected: string, escape?: ReflectionSpec["escape"]): string =>
-  template.split(SENTINEL).join(applyEscape(injected, escape));
+const substitute = (template: string, injected: string, r: ReflectionSpec): string => {
+  let out = template;
+  for (const [sentinel, spec] of Object.entries(r.extraSentinels ?? {})) {
+    out = out.split(sentinel).join(applyEscape(injected, spec));
+  }
+  return out.split(SENTINEL).join(applyEscape(injected, r.escape));
+};
 
 /**
  * Build a mocked SDK whose `requests.send` behaves like the fixture's vulnerable server:
@@ -164,12 +177,12 @@ export const buildReplaySdk = (fixture: ReplayFixture) => ({
       const injected = extractInjected(spec, fixture.reflection) ?? "";
       const r = fixture.reflection;
       const body = r.bodyTemplate != null
-        ? substitute(r.bodyTemplate, injected, r.escape)
+        ? substitute(r.bodyTemplate, injected, r)
         : (fixture.baseline.body ?? "");
       const headers: Record<string, string | string[]> = {};
       for (const [k, v] of Object.entries(fixture.baseline.headers ?? {})) headers[k] = v;
       for (const [k, tpl] of Object.entries(r.headerTemplates ?? {})) {
-        headers[k] = substitute(tpl, injected, r.escape);
+        headers[k] = substitute(tpl, injected, r);
       }
       return {
         response: {
