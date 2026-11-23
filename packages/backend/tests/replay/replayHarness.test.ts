@@ -4,6 +4,7 @@ import jsonBodyFixture from "./json-body.fixture.ts";
 import genericHeaderFixture from "./generic-header.fixture.ts";
 import scriptCloseFixture from "./script-close-escape.fixture.ts";
 import encodedTextFixture from "./encoded-text-raw-script.fixture.ts";
+import nestedJsonFixture from "./nested-json-script.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -73,6 +74,16 @@ describe("replay harness", () => {
     expect(f).toBeDefined();
     expect(f!.confirmed).toBe(true);
     expect(/script string/i.test(f!.context)).toBe(true);
+    expect(f!.severity).toBe("low");
+  });
+
+  test("a correctly escaped nested JSON-in-JS string is not a backslash escape (FP class fixed)", async () => {
+    const { body } = await runFixture(nestedJsonFixture);
+    const f = body.find((p) => p.name === "referrer");
+    expect(f).toBeDefined();
+    expect(f!.confirmed).toBe(true);
+    expect(/script string/i.test(f!.context)).toBe(true);
+    expect(f!.aggressive).not.toContain("\\");
     expect(f!.severity).toBe("low");
   });
 
