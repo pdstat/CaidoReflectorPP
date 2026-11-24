@@ -87,7 +87,7 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
     const contextInfo = payloadGenerator.generate(sdk as any, param.value);
     let bestContext = resolveBestContext(baselineMatches, bodyText, tags, contextInfo);
 
-    const { confirmed, reflected, successfulChars: probeChars, bestContext: resolvedCtx } = await runProbes(sdk, request, param, contextInfo, bestContext);
+    const { confirmed, reflected, successfulChars: probeChars, bestContext: resolvedCtx, firstBatchCount } = await runProbes(sdk, request, param, contextInfo, bestContext);
 
     let pathCountResult: Awaited<ReturnType<typeof runCountProbe>>;
     if (param.source === 'Path' && (confirmed || reflected)) {
@@ -154,7 +154,14 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
         finalMatches = pathCountResult.matches;
         finalValue = pathCountResult.value;
       } else {
-        const countResult = await runCountProbe(sdk, request, param);
+        // The first probe batch carries a unique leading marker, so its count stands in
+        // for a separate count probe -- unless the batch changed the response status (e.g. a
+        // quote triggered an error page) so its count is unrepresentative, or the param is a
+        // Path segment, whose count probe also does false-positive suppression.
+        const useFirstBatch = param.source !== 'Path' && firstBatchCount?.code === baselineCode;
+        const countResult = useFirstBatch && firstBatchCount
+          ? firstBatchCount
+          : await runCountProbe(sdk, request, param);
         if (countResult && countResult.matches.length >= baselineMatches.length) {
           finalMatches = countResult.matches;
           finalValue = countResult.value;

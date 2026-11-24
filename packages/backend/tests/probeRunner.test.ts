@@ -135,7 +135,7 @@ describe("runProbes()", () => {
 
     const baselineBody = "abc";
 
-    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const responseBodyNeedle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + responseBodyNeedle('<')) }));
 
     const result = await runProbes(
@@ -156,7 +156,7 @@ describe("runProbes()", () => {
       body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'jsInQuote', char: ch }] : []
     );
     const baselineBody = "abc";
-    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const responseBodyNeedle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + responseBodyNeedle('/')) }));
 
     const result = await runProbes(
@@ -179,7 +179,7 @@ describe("runProbes()", () => {
     const firstBatch = ['a','b','c','d','e','f','g','h']; // 8 chars
     const secondBatch = ['i'];
     const allPayload = [...firstBatch, ...secondBatch];
-    const needleFor = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const needleFor = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     let call = 0;
     const sdk = buildSdk(async () => {
       call++;
@@ -210,7 +210,7 @@ describe("runProbes()", () => {
     );
     const baselineBody = "abc";
     // Response contains the DECODED form (pre + < + suf), not the encoded form (pre + %3C + suf)
-    const decodedNeedle = "R".repeat(5) + "<" + "R".repeat(5);
+    const decodedNeedle = "R".repeat(12) + "<" + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + decodedNeedle) }));
 
     const result = await runProbes(
@@ -235,7 +235,7 @@ describe("runProbes()", () => {
     });
     const baselineBody = "abc";
     const chars = ["<", ";", "("];
-    const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
+    const needle = (ch: string) => "R".repeat(12) + ch + "R".repeat(5);
     const bodyContent = baselineBody + chars.map(needle).join("");
     const sdk = buildSdk(async () => ({ response: buildResponse(bodyContent) }));
 
@@ -264,7 +264,7 @@ describe("runProbes()", () => {
     });
     const baselineBody = "abc";
     const chars = ["<", "`"];
-    const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
+    const needle = (ch: string) => "R".repeat(12) + ch + "R".repeat(5);
     const bodyContent = baselineBody + chars.map(needle).join("");
     const sdk = buildSdk(async () => ({ response: buildResponse(bodyContent) }));
 
@@ -291,7 +291,7 @@ describe("runProbes()", () => {
     });
     const baselineBody = "abc";
     const chars = ["<", "a"];
-    const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
+    const needle = (ch: string) => "R".repeat(12) + ch + "R".repeat(5);
     const bodyContent = baselineBody + chars.map(needle).join("");
     const sdk = buildSdk(async () => ({ response: buildResponse(bodyContent) }));
 
@@ -308,7 +308,7 @@ describe("runProbes()", () => {
 
   test("JSON string sealed: structural chars removed when \" and \\ escaped", async () => {
     // Simulate JSON.stringify: " and \ are NOT reflected, but , } ] : are
-    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const responseBodyNeedle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     jsonDetectImpl.mockImplementation((pre, ch, suf, body) => {
       if (ch === '"' || ch === '\\') return []; // escaped by server
       if (body.includes(pre + encodeURIComponent(ch) + suf))
@@ -341,7 +341,7 @@ describe("runProbes()", () => {
   });
 
   test("JSON string NOT sealed: structural chars kept when \" reflects", async () => {
-    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const responseBodyNeedle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     jsonDetectImpl.mockImplementation((pre, ch, suf, body) => {
       if (body.includes(pre + encodeURIComponent(ch) + suf))
         return [{ context: 'jsonString', char: ch }];
@@ -368,7 +368,7 @@ describe("runProbes()", () => {
   });
 
   test("JSON structure context: structural chars always kept", async () => {
-    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const responseBodyNeedle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     jsonDetectImpl.mockImplementation((pre, ch, suf, body) => {
       if (ch === '"' || ch === '\\') return []; // even if escaped
       if (body.includes(pre + encodeURIComponent(ch) + suf))
@@ -397,7 +397,7 @@ describe("runProbes()", () => {
 
   test("jsonInQuote sealed: structural chars removed, < also absent", async () => {
     // Simulates /json-script-escaped: JSON.stringify + \u003c
-    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const responseBodyNeedle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     mockDetectImpl.mockImplementation((pre, ch, suf, body) => {
       if (ch === '"' || ch === '\\' || ch === '<') return []; // all escaped
       if (body.includes(pre + encodeURIComponent(ch) + suf))
@@ -425,7 +425,7 @@ describe("runProbes()", () => {
   });
 
   test("JSON responses use JsonResponseBodyPayloadGenerator", async () => {
-    const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const responseBodyNeedle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     mockDetectImpl.mockImplementation(() => []);
     jsonDetectImpl.mockImplementation((pre, ch, suf, body) =>
       body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'jsonString', char: ch }] : []
@@ -493,7 +493,7 @@ describe("runProbes()", () => {
         ? [{ context: 'attributeEscaped', char: ch }] : []
     );
     const baselineBody = "abc";
-    const needle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
+    const needle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + needle('"')) }));
     const result = await runProbes(
       sdk,
@@ -709,6 +709,48 @@ describe("orderPayloadBreakoutFirst()", () => {
   test("no terminators present is a no-op", () => {
     expect(orderPayloadBreakoutFirst(['<', '>', '/', ';']))
       .toEqual(['<', '>', '/', ';']);
+  });
+});
+
+describe("runProbes() first-batch count", () => {
+  // randomValue is mocked to "R".repeat(len): the first batch's leading marker is 12 R's.
+  const countMarker = "R".repeat(12);
+
+  test("counts the leading marker's reflections and records the status", async () => {
+    const body = `<p>${countMarker}x</p><p>${countMarker}y</p>`;
+    const sdk = buildSdk(async () => ({ response: buildResponse(body, 200) }));
+    const result = await runProbes(
+      sdk, buildRequestWrapper(), { key: "p", source: "URL", value: "orig" },
+      { context: ["html"], payload: ["<"] }, "html"
+    );
+    expect(result.firstBatchCount).toEqual({
+      matches: [[3, 15], [23, 35]], value: countMarker, code: 200,
+    });
+  });
+
+  test("is taken from the first batch only, even when it fails the content-type gate", async () => {
+    const payload = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+    let call = 0;
+    const sdk = buildSdk(async () => {
+      call++;
+      return { response: buildResponse(call === 1 ? countMarker : "", 302, "image/png") };
+    });
+    const result = await runProbes(
+      sdk, buildRequestWrapper(), { key: "p", source: "URL", value: "orig" },
+      { context: ["html"], payload }, "html"
+    );
+    expect(sdk.requests.send).toHaveBeenCalledTimes(2);
+    expect(result.firstBatchCount?.matches).toHaveLength(1);
+    expect(result.firstBatchCount?.code).toBe(302);
+  });
+
+  test("is absent when the first batch request throws", async () => {
+    const sdk = buildSdk(async () => { throw new Error("network fail"); });
+    const result = await runProbes(
+      sdk, buildRequestWrapper(), { key: "p", source: "URL", value: "orig" },
+      { context: ["html"], payload: ["<"] }, "html"
+    );
+    expect(result.firstBatchCount).toBeUndefined();
   });
 });
 
