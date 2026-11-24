@@ -20,7 +20,6 @@ export interface ProbeResult {
     reflected: boolean;
     successfulChars: Set<string>;
     bestContext: string;
-    probeWasStable: boolean;
 }
 
 export interface CountProbeResult {
@@ -165,20 +164,15 @@ export async function runProbes(
     request: any,
     param: any,
     contextInfo: any,
-    baselineMatches: Array<[number, number]>,
-    baselineCode: number,
-    baselineSig: string,
-    bodyText: string,
-    KEY_WORDS_LOCAL: string[],
     initialBestContext: string
 ): Promise<ProbeResult> {
     const successfulChars = new Set<string>();
     // Breakout chars seen literal in an HTML-family context, keyed by that context.
     // Used after probing to escalate past a sealed context the ladder chose first.
     const htmlFamilyChars = new Map<string, Set<string>>();
-    let confirmed = false; let reflected = false; let probeWasStable = false; let bestContext = initialBestContext;
+    let confirmed = false; let reflected = false; let bestContext = initialBestContext;
     if (!contextInfo || !Array.isArray(contextInfo.payload) || contextInfo.payload.length === 0) {
-        return { confirmed: false, reflected: false, successfulChars, bestContext, probeWasStable };
+        return { confirmed: false, reflected: false, successfulChars, bestContext };
     }
     const orderedPayload = orderPayloadBreakoutFirst(contextInfo.payload);
     const BATCH = 8;
@@ -201,11 +195,6 @@ export async function runProbes(
                 sdk.console.log('[Reflector++] Probe response content-type gating failed, skipping batch');
                 continue;
             }
-            if (probe.response.getCode?.() === baselineCode) {
-                const probeBodyStable = probe.response.getBody()?.toText() || '';
-                const probeSig = KEY_WORDS_LOCAL.map(k => findMatches(probeBodyStable, k, true, sdk).length).join(',');
-                if (probeSig === baselineSig) probeWasStable = true;
-            }
             const probeBody = probe.response.getBody()?.toText() || '';
             const normalizedContentType = Array.isArray(ctHeader)
                 ? ctHeader.find((value) => value && value.trim() !== "")
@@ -219,10 +208,8 @@ export async function runProbes(
                 ? new JsResponseBodyPayloadGenerator(probeBody)
                 : new ResponseBodyPayloadGenerator(probeBody);
             for (const m of markers) {
-                sdk.console.log(`[Reflector++] Analysing probe results for marker "${m.ch}"`);
                 const encodedNeedle = m.pre + encodeURIComponent(m.ch) + m.suf;
                 const decodedNeedle = m.pre + m.ch + m.suf;
-                sdk.console.log(`[Reflector++] Looking for needle: ${encodedNeedle} in probe body ${probeBody.substring(0, 100)}...`);
                 const foundEncoded = findMatches(probeBody, encodedNeedle, true, sdk).length > 0;
                 const foundDecoded = findMatches(probeBody, decodedNeedle, true, sdk).length > 0;
                 if (!foundEncoded && !foundDecoded) continue;
@@ -309,7 +296,7 @@ export async function runProbes(
             for (const c of best.chars) successfulChars.add(c);
         }
     }
-    return { confirmed, reflected, successfulChars, bestContext, probeWasStable };
+    return { confirmed, reflected, successfulChars, bestContext };
 }
 
 export async function runCountProbe(

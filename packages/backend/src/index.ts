@@ -57,10 +57,7 @@ export function init(sdk: SDK<API>) {
     })
     sdk.events.onInterceptResponse(async (sdk, request: Request, response: Response) => {
         if (!ConfigStore.getEnabled()) return;
-        const shouldProbe = ConfigStore.getProbeOutOfScopeRequests();
-        sdk.console.log(`Reflector++: shouldProbe=${shouldProbe}, inScope=${sdk.requests.inScope(request)}`);
-        if ((!sdk.requests.inScope(request) && shouldProbe)
-            || (sdk.requests.inScope(request))) {
+        if (ConfigStore.getProbeOutOfScopeRequests() || sdk.requests.inScope(request)) {
             withTimeout(() => reflectorRun({ request, response }, sdk), 40_000);
         }
     });

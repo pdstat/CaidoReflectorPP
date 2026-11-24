@@ -245,11 +245,6 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _isPayloadInSpecifiedContext(tagName: string, marker: string, inquote: boolean): boolean {
-		const dbg = (m: string) => {
-			try {
-				(this as any)?.sdk?.console?.log?.(`[Reflector++][detectCtx] ${m}`);
-			} catch { }
-		};
 		let nodes: any[] = [];
 		const lower = tagName.toLowerCase();
 		if (lower === "script") {
@@ -260,11 +255,6 @@ const ResponseBodyPayloadGenerator = class {
 		} else {
 			nodes = ((this.root as any).querySelectorAll?.(tagName) ?? []) as any[];
 		}
-		dbg(
-			`enter tag=${tagName} inquote=${inquote} nodes=${nodes.length} marker=${JSON.stringify(
-				marker
-			)}`
-		);
 		const variants = new Set<string>();
 		const expandBackslashes = (s: string, depth: number) => {
 			let out = s;
@@ -286,29 +276,13 @@ const ResponseBodyPayloadGenerator = class {
 		for (const seed of seeds) {
 			for (let d = 0; d <= 3; d++) variants.add(expandBackslashes(seed, d));
 		}
-		// map(JSON.stringify) confuses TS's overloads; wrap explicitly
-		dbg(
-			`candidates=${Array.from(variants)
-				.slice(0, 8)
-				.map((v) => JSON.stringify(v))
-				.join(", ")}${variants.size > 8 ? " …" : ""}`
-		);
 		for (const el of nodes) {
 			const src: string = typeof (el as any).rawText === "string"
 				? (el as any).rawText
 				: typeof (el as any).text === "string"
 					? (el as any).text
 					: "";
-			dbg(`node len=${src?.length ?? 0}`);
 			if (!src) continue;
-			try {
-				const px = marker.slice(0, 5);
-				const sx = marker.slice(-5);
-				const iPx = px ? src.indexOf(px) : -1;
-				const iSx = sx ? src.indexOf(sx) : -1;
-				if (px) dbg(`probe prefix=${JSON.stringify(px)} idx=${iPx}`);
-				if (sx) dbg(`probe suffix=${JSON.stringify(sx)} idx=${iSx}`);
-			} catch { }
 			const srcLC = src.toLowerCase();
 			if (inquote) {
 				for (const cand of variants) {
@@ -317,9 +291,7 @@ const ResponseBodyPayloadGenerator = class {
 						tries = 0;
 					while ((pos = srcLC.indexOf(candLC, pos + 1)) !== -1) {
 						tries++;
-						const inside = this._isInsideJsQuotedStringAt(src, pos);
-						dbg(`try cand=${JSON.stringify(cand)} pos=${pos} inside=${inside}`);
-						if (inside) return true;
+						if (this._isInsideJsQuotedStringAt(src, pos)) return true;
 						if (tries > 20) break;
 					}
 				}
@@ -338,7 +310,6 @@ const ResponseBodyPayloadGenerator = class {
 				}
 			}
 		}
-		dbg(`no-hit`);
 		return false;
 	}
 
@@ -459,11 +430,7 @@ const ResponseBodyPayloadGenerator = class {
 					let pos = -1,
 						tries = 0;
 					while ((pos = src.indexOf(cand, pos + 1)) !== -1) {
-						const inside = this._isInsideJsQuotedStringAt(src, pos);
-						sdk?.console?.log?.(
-							`[Reflector++][detectCtx] try cand=${JSON.stringify(cand)} pos=${pos} inside=${inside}`
-						);
-						if (inside) return true;
+						if (this._isInsideJsQuotedStringAt(src, pos)) return true;
 						if (++tries > 32) break;
 					}
 				}
@@ -475,16 +442,6 @@ const ResponseBodyPayloadGenerator = class {
 				? (el as any).rawText
 				: (typeof (el as any).text === "string" ? (el as any).text : "") || ""
 		})).filter(({ src }) => src.length > 0);
-		try {
-			const px = prefix.slice(0, 5),
-				sx = suffix.slice(-5);
-			for (const { src } of scriptSrcs) {
-				const iPx = px ? src.indexOf(px) : -1;
-				const iSx = sx ? src.indexOf(sx) : -1;
-				sdk?.console?.log?.(`[Reflector++][detectCtx] probe prefix=${JSON.stringify(px)} idx=${iPx}`);
-				sdk?.console?.log?.(`[Reflector++][detectCtx] probe suffix=${JSON.stringify(sx)} idx=${iSx}`);
-			}
-		} catch { }
 		literalMatch = searchCandidates(literalCandidates, scriptSrcs);
 		if (!literalMatch) {
 			escapedMatch = searchCandidates(escapedCandidates, scriptSrcs);
@@ -1406,14 +1363,6 @@ const ResponseBodyPayloadGenerator = class {
 	): { payload: string[]; context: string[] } {
 		// Two-step decode (intentional) mirrors original logic: handle double-encoded inputs.
 		reflectedValue = decodeURIComponent(reflectedValue);
-		const scripts = (this.root as any).querySelectorAll?.("script") ?? [];
-		// styles & templates retained for possible future heuristics
-		const styles = (this.root as any).querySelectorAll?.("style") ?? [];
-		const tmpls = (this.root as any).querySelectorAll?.("template") ?? [];
-		const execFlags = scripts.slice(0, 10).map((el: any) => {
-			const t = (el.getAttribute?.("type") || "").toString();
-			return `${t || "<empty>"} => exec=${this._isJsExecutableScriptType(t)}`;
-		});
 		sdk.console.log(
 			`[Reflector++] Generating payloads for reflected value: ${reflectedValue}`
 		);
@@ -1421,7 +1370,6 @@ const ResponseBodyPayloadGenerator = class {
 		const payloadSet = new Set<string>();
 		const contextSet = new Set<string>();
 		this._walkNodes(this.root as any, (node: any) => {
-			sdk.console.log(`[Reflector++] Examining node: type=${node?.nodeType} tag=${node?.rawTagName || "<none>"}`);
 			// Order matters; each helper returns true if it handled the node fully.
 			if (this._handleElementStructural(node, reflectedValue, payloadSet, contextSet, sdk)) return;
 			if (this._handleTextNode(node, reflectedValue, payloadSet, contextSet, sdk)) return;
