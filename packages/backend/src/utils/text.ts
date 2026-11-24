@@ -1,4 +1,5 @@
 // Text & encoding related helpers
+import type { LogSdk } from "../core/types.js";
 
 export const randomValue = (length = 8): string => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -28,7 +29,7 @@ const findAll = (text: string, needle: string): Array<[number, number]> => {
   return out;
 };
 
-export const findMatches = (text: string | undefined, substring: string, fromProbe=false, sdk?: SDK): Array<[number, number]> => {
+export const findMatches = (text: string | undefined, substring: string, fromProbe=false, sdk?: LogSdk): Array<[number, number]> => {
   if (!text) return [];
 
   // 1) literal match

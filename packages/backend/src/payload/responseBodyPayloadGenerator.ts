@@ -1,6 +1,4 @@
-// Import Caido SDK types in a way compatible with ts-node/NodeNext resolution (type-only to avoid runtime module resolution issues)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import type { SDK } from "@caido/sdk-workflow";
+import type { LogSdk } from "../core/types.js";
 import { parse, HTMLElement, Node } from "node-html-parser";
 
 // Moved from src/payloadGenerator.ts (original location) for modularization.
@@ -314,7 +312,7 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	public detect(
-		sdk: SDK | { console: { log: (msg: string) => void } },
+		sdk: LogSdk,
 		context: { context: string[] },
 		prefix: string,
 		payload: string,
@@ -1358,7 +1356,7 @@ const ResponseBodyPayloadGenerator = class {
 	 *    enabling composite scoring later.
 	 */
 	public generate(
-		sdk: SDK | { console: { log: (msg: string) => void } },
+		sdk: LogSdk,
 		reflectedValue: string
 	): { payload: string[]; context: string[] } {
 		// Two-step decode (intentional) mirrors original logic: handle double-encoded inputs.

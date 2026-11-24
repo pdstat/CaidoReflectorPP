@@ -9,7 +9,7 @@
     "build": "vite build"
   },
   "devDependencies": {
-    "@caido/sdk-backend": "^0.46.0",
+    "@caido/sdk-backend": "0.59.0",
     "node-html-parser": "^7.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.12.7",

@@ -1,4 +1,4 @@
-import type { SDK } from "@caido/sdk-workflow";
+import type { LogSdk } from "../core/types.js";
 
 // Payload generator for standalone JavaScript responses (application/javascript,
 // text/javascript, ...). The whole body is script, so -- unlike the HTML-aware
@@ -77,7 +77,7 @@ const JsResponseBodyPayloadGenerator = class {
     }
 
     public generate(
-        sdk: SDK | { console: { log: (msg: string) => void } },
+        sdk: LogSdk,
         reflectedValue: string
     ): { payload: string[]; context: string[] } {
         // Dangerous-only probe set: string/template breakout, code injection, and the
@@ -106,7 +106,7 @@ const JsResponseBodyPayloadGenerator = class {
     }
 
     public detect(
-        sdk: SDK | { console: { log: (msg: string) => void } },
+        sdk: LogSdk,
         _context: { context: string[] },
         prefix: string,
         payload: string,
