@@ -1,4 +1,4 @@
-import type { SDK } from "@caido/sdk-workflow";
+import type { LogSdk } from "../core/types.js";
 
 const JsonResponseBodyPayloadGenerator = class {
     body: string;
@@ -63,7 +63,7 @@ const JsonResponseBodyPayloadGenerator = class {
     }
 
     public generate(
-        sdk: SDK | { console: { log: (msg: string) => void } },
+        sdk: LogSdk,
         reflectedValue: string
     ): { payload: string[]; context: string[] } {
         /**
@@ -98,7 +98,7 @@ const JsonResponseBodyPayloadGenerator = class {
     }
 
     public detect(
-        sdk: SDK | { console: { log: (msg: string) => void } },
+        sdk: LogSdk,
         context: { context: string[] },
         prefix: string,
         payload: string,

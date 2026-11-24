@@ -1,5 +1,4 @@
 import { NO_SNIFF_CONTENT_TYPES } from "./core/constants.js";
-import { StorageSDK } from "@caido/sdk-frontend/src/types/storage";
 import { FrontendSDK } from "@/types";
 
 const ENABLED_STORAGE_KEY = "enabled"
@@ -12,7 +11,7 @@ const PATH_BLOCKLIST_STORAGE_KEY = "pathBlocklist"
 
 export class PluginSettings {
 
-    private storage: StorageSDK;
+    private storage: FrontendSDK["storage"];
     private sdk: FrontendSDK;
 
     constructor(private sdk: FrontendSDK) {

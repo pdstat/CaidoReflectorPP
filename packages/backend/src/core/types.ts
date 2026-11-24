@@ -36,3 +36,6 @@ export interface RequestParameter {
   parentKey?: string;
   jsonPath?: string[];
 }
+
+// The only SDK surface the payload generators use: logging.
+export type LogSdk = { console: { log: (msg: string) => void } };

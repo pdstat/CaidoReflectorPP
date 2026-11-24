@@ -22,13 +22,13 @@ const withTimeout: WithTimeout = (asyncOperation, timeoutMs) => {
 };
 
 export type API = DefineAPI<{
-    setEnabled: (value: boolean) => Promise<void>;
-    setProbeOutOfScope: (value: boolean) => Promise<void>;
-    setCheckResponseHeaderReflections: (value: boolean) => Promise<void>;
-    setCheckJsResponseReflections: (value: boolean) => Promise<void>;
-    setLogUnconfirmedFindings: (value: boolean) => Promise<void>;
-    setNoSniffContentTypes: (value: Set<string>) => Promise<void>;
-    setPathBlocklist: (value: string) => Promise<void>;
+    setEnabled: (sdk: SDK, value: boolean) => Promise<void>;
+    setProbeOutOfScope: (sdk: SDK, value: boolean) => Promise<void>;
+    setCheckResponseHeaderReflections: (sdk: SDK, value: boolean) => Promise<void>;
+    setCheckJsResponseReflections: (sdk: SDK, value: boolean) => Promise<void>;
+    setLogUnconfirmedFindings: (sdk: SDK, value: boolean) => Promise<void>;
+    setNoSniffContentTypes: (sdk: SDK, value: string) => Promise<void>;
+    setPathBlocklist: (sdk: SDK, value: string) => Promise<void>;
 }>;
 
 export function init(sdk: SDK<API>) {
