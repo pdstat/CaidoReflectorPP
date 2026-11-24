@@ -11,6 +11,7 @@ import jsCommentFixture from "./js-response-comment.fixture.ts";
 import unquotedNoBreakoutFixture from "./unquoted-attr-no-breakout.fixture.ts";
 import quotedAttrRawLtFixture from "./quoted-attr-raw-lt.fixture.ts";
 import jsEncodedInStringFixture from "./js-response-encoded-in-string.fixture.ts";
+import foreignQuoteFixture from "./foreign-quote-collision.fixture.ts";
 
 describe("replay harness", () => {
   test("reproduces a confirmed JS-string breakout through the real detection code", async () => {
@@ -132,6 +133,12 @@ describe("replay harness", () => {
     const { body } = await runFixture(jsEncodedInStringFixture);
     const f = body.find((p) => p.name === "eid");
     expect(f?.context ?? "").not.toBe("Script");
+    expect(["high", "critical"]).not.toContain(f?.severity ?? "info");
+  });
+
+  test("a quote char inside a foreign-quote JS string is not a breakout (FP class fixed)", async () => {
+    const { body } = await runFixture(foreignQuoteFixture);
+    const f = body.find((p) => p.name === "oq");
     expect(["high", "critical"]).not.toContain(f?.severity ?? "info");
   });
 

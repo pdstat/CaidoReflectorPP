@@ -197,19 +197,51 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _isInsideJsQuotedStringAt(src: string, idxStart: number): boolean {
+		return this._jsQuoteOpenAt(src, idxStart).quote !== null;
+	}
+
+	// Delimiter of the JS string enclosing src[idxStart] and the index of its opening quote
+	// (null / -1 in code position).
+	private _jsQuoteOpenAt(src: string, idxStart: number): { quote: '"' | "'" | "`" | null; open: number } {
 		let inQuote: '"' | "'" | "`" | null = null;
+		let open = -1;
 		let escaped = false;
 		for (let i = 0; i < idxStart && i < src.length; i++) {
 			const ch = src[i];
 			if (escaped) { escaped = false; continue; }
 			if (inQuote) {
 				if (ch === "\\") { escaped = true; continue; }
-				if (ch === inQuote) { inQuote = null; continue; }
+				if (ch === inQuote) { inQuote = null; open = -1; continue; }
 			} else {
-				if (ch === '"' || ch === "'" || ch === "`") { inQuote = ch; continue; }
+				if (ch === '"' || ch === "'" || ch === "`") { inQuote = ch; open = i; continue; }
 			}
 		}
-		return inQuote !== null;
+		return { quote: inQuote, open };
+	}
+
+	// True when a probed quote char lands, in every executable-script occurrence, inside a
+	// JS string delimited by a DIFFERENT quote that was already open before the probe value
+	// began (`batchStartPrefix` = first marker of the probe batch). Such a quote cannot end
+	// its string. A string opened by the probe's own earlier chars does not count -- those
+	// markers are really in the reflection's original context.
+	public isQuoteInertInScript(batchStartPrefix: string, prefix: string, quote: string, suffix: string): boolean {
+		const marker = prefix + quote + suffix;
+		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
+		let sawInert = false;
+		for (const el of scripts) {
+			if (!this._isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())) continue;
+			const src: string = typeof el.rawText === "string" ? el.rawText : "";
+			let pos = src.indexOf(marker);
+			while (pos !== -1) {
+				const { quote: enclosing, open } = this._jsQuoteOpenAt(src, pos + prefix.length);
+				const batchStart = src.lastIndexOf(batchStartPrefix, pos);
+				const preExisting = batchStart !== -1 && open !== -1 && open < batchStart;
+				if (enclosing === null || enclosing === quote || !preExisting) return false;
+				sawInert = true;
+				pos = src.indexOf(marker, pos + 1);
+			}
+		}
+		return sawInert;
 	}
 
 	private _isPayloadInSpecifiedContext(tagName: string, marker: string, inquote: boolean): boolean {
