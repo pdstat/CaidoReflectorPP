@@ -1,10 +1,9 @@
 // Avoid direct typed import (Caido SDK d.ts is not a module under NodeNext); use loose any typing.
 type SDK = any; type HttpInput = any;
 import { AnalyzedReflectedParameter } from "../../core/types.js";
-import { findMatches, computeKeywordCounts } from "../../utils/text.js";
+import { findMatches } from "../../utils/text.js";
 import { buildEndpoint, isJsContentType } from "../../utils/http.js";
 import { enumerateRequestParameters } from "../../utils/params.js";
-import { KEY_WORDS } from "../../core/constants.js";
 import { classifySeverity } from "../scoring.js";
 import { toCanonical, CONTEXT } from "../contextMap.js";
 import JsonResponseBodyPayloadGenerator from "../../payload/jsonResponseBodyPayloadGenerator.ts";
@@ -60,8 +59,6 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
     ? new JsResponseBodyPayloadGenerator(bodyText)
     : new ResponseBodyPayloadGenerator(bodyText);
   const baselineCode = response.getCode();
-  const baselineBody = bodyText;
-  const baselineSig = computeKeywordCounts(baselineBody, KEY_WORDS).join(",");
   const endpoint = buildEndpoint(input.request);
 
   let requestParameters = enumerateRequestParameters(request.toSpec(), sdk, response.getCode());
@@ -90,7 +87,7 @@ export async function checkBodyReflections(input: HttpInput, sdk: SDK, logUnconf
     const contextInfo = payloadGenerator.generate(sdk as any, param.value);
     let bestContext = resolveBestContext(baselineMatches, bodyText, tags, contextInfo);
 
-    const { confirmed, reflected, successfulChars: probeChars, bestContext: resolvedCtx } = await runProbes(sdk, request, param, contextInfo, baselineMatches, baselineCode, baselineSig, bodyText, KEY_WORDS, bestContext);
+    const { confirmed, reflected, successfulChars: probeChars, bestContext: resolvedCtx } = await runProbes(sdk, request, param, contextInfo, bestContext);
 
     let pathCountResult: Awaited<ReturnType<typeof runCountProbe>>;
     if (param.source === 'Path' && (confirmed || reflected)) {

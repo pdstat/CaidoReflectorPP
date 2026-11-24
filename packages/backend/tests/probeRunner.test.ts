@@ -1,5 +1,4 @@
 import { runProbes, runCountProbe, orderPayloadBreakoutFirst } from "../src/analysis/bodyReflection/probeRunner.js";
-import { findMatches } from "../src/utils/text.js";
 import { ConfigStore } from "../src/stores/configStore.js";
 
 // Mock randomValue so we get deterministic pre/suf wrappers (length param respected)
@@ -114,7 +113,6 @@ beforeEach(() => {
 });
 
 describe("runProbes()", () => {
-  const KEY_WORDS_LOCAL = ["abc"]; // keep simple for stability signature
 
   test("Early return when contextInfo has no payload", async () => {
     const sdk = buildSdk(async () => { throw new Error("should not send"); });
@@ -123,25 +121,19 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["html"], payload: [] },
-      [],
-      200,
-      "0", // baselineSig
-      "baseline", // bodyText
-      KEY_WORDS_LOCAL,
       "html"
     );
-    expect(result).toEqual({ confirmed: false, reflected: false, successfulChars: new Set(), bestContext: "html", probeWasStable: false });
+    expect(result).toEqual({ confirmed: false, reflected: false, successfulChars: new Set(), bestContext: "html" });
     expect(sdk.requests.send).not.toHaveBeenCalled();
   });
 
-  test("Single batch success adds successful char, sets confirmed and stability", async () => {
+  test("Single batch success adds successful char, sets confirmed", async () => {
     // Detection returns literal 'html' context so char qualifies as successful
     mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
       body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'html', char: ch }] : []
     );
 
-    const baselineBody = "abc"; // contains KEY_WORD for baselineSig
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
+    const baselineBody = "abc";
 
     const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + responseBodyNeedle('<')) }));
@@ -151,16 +143,10 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["jsonString"], payload: ["<"] },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "html"
     );
     expect(result.confirmed).toBe(true);
     expect(result.reflected).toBe(true);
-    expect(result.probeWasStable).toBe(true);
     expect(Array.from(result.successfulChars)).toEqual(["<"]);
     expect(result.bestContext).toBe("html");
   });
@@ -170,7 +156,6 @@ describe("runProbes()", () => {
       body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'jsInQuote', char: ch }] : []
     );
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const responseBodyNeedle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + responseBodyNeedle('/')) }));
 
@@ -179,11 +164,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["html"], payload: ["/"] },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "html"
     );
     expect(result.confirmed).toBe(true);
@@ -196,7 +176,6 @@ describe("runProbes()", () => {
       body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'html', char: ch }] : []
     );
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const firstBatch = ['a','b','c','d','e','f','g','h']; // 8 chars
     const secondBatch = ['i'];
     const allPayload = [...firstBatch, ...secondBatch];
@@ -215,11 +194,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["html"], payload: allPayload },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "html"
     );
     expect(result.confirmed).toBe(true);
@@ -235,7 +209,6 @@ describe("runProbes()", () => {
       body.includes(pre + ch + suf) ? [{ context: 'html', char: ch }] : []
     );
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     // Response contains the DECODED form (pre + < + suf), not the encoded form (pre + %3C + suf)
     const decodedNeedle = "R".repeat(5) + "<" + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + decodedNeedle) }));
@@ -245,11 +218,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["html"], payload: ["<"] },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "html"
     );
     expect(result.reflected).toBe(true);
@@ -266,7 +234,6 @@ describe("runProbes()", () => {
       return [{ context: "jsInQuote", char: ch }];
     });
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const chars = ["<", ";", "("];
     const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
     const bodyContent = baselineBody + chars.map(needle).join("");
@@ -277,11 +244,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["jsInQuote", "html"], payload: chars },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "Script String (\")"
     );
     expect(result.confirmed).toBe(true);
@@ -301,7 +263,6 @@ describe("runProbes()", () => {
       return [{ context: "jsInQuote", char: ch }];
     });
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const chars = ["<", "`"];
     const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
     const bodyContent = baselineBody + chars.map(needle).join("");
@@ -312,11 +273,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["jsInQuote", "html"], payload: chars },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "Script String (\")"
     );
     expect(result.confirmed).toBe(true);
@@ -334,7 +290,6 @@ describe("runProbes()", () => {
       return [{ context: "js", char: ch }];
     });
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const chars = ["<", "a"];
     const needle = (ch: string) => "R".repeat(5) + ch + "R".repeat(5);
     const bodyContent = baselineBody + chars.map(needle).join("");
@@ -345,11 +300,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["js", "rawtextElement"], payload: chars },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "Script"
     );
     expect(result.confirmed).toBe(true);
@@ -366,7 +316,6 @@ describe("runProbes()", () => {
       return [];
     });
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const allChars = ['"', '\\', ',', '}', ']', ':', ''];
     const bodyContent = baselineBody + allChars
       .filter(ch => ch !== '"' && ch !== '\\')
@@ -380,11 +329,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["jsonString"], payload: allChars },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "JSON String"
     );
     // Structural chars removed because quote breakout impossible
@@ -404,7 +348,6 @@ describe("runProbes()", () => {
       return [];
     });
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const allChars = ['"', ',', '}'];
     const bodyContent = baselineBody + allChars.map(ch => responseBodyNeedle(ch)).join('');
     const sdk = buildSdk(async () => ({
@@ -416,11 +359,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["jsonString"], payload: allChars },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "JSON String"
     );
     expect(result.confirmed).toBe(true);
@@ -438,7 +376,6 @@ describe("runProbes()", () => {
       return [];
     });
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const allChars = ['"', '\\', ',', '}'];
     const bodyContent = baselineBody + [',', '}'].map(ch => responseBodyNeedle(ch)).join('');
     const sdk = buildSdk(async () => ({
@@ -450,11 +387,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["jsonStructure"], payload: allChars },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "JSON Structure"
     );
     // Structure context: structural chars always exploitable
@@ -473,7 +405,6 @@ describe("runProbes()", () => {
       return [];
     });
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const allChars = ['"', '\\', '<', ',', '}', ']', ':', ''];
     const bodyContent = baselineBody + [',', '}', ']', ':', '']
       .map(ch => responseBodyNeedle(ch)).join('');
@@ -486,11 +417,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["jsonInQuote"], payload: allChars },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "JSON Script Block (string)"
     );
     expect(result.successfulChars.has(',')).toBe(false);
@@ -505,7 +431,6 @@ describe("runProbes()", () => {
       body.includes(pre + encodeURIComponent(ch) + suf) ? [{ context: 'jsonString', char: ch }] : []
     );
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + responseBodyNeedle('<'), 200, 'application/json') }));
 
     const result = await runProbes(
@@ -513,11 +438,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["html"], payload: ["<"] },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "html"
     );
 
@@ -536,8 +456,6 @@ describe("runProbes()", () => {
     mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
       body.includes(pre + ch + suf) ? [{ context: 'html', char: ch }] : []
     );
-    const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const sdk = buildSdk(async (spec: any) => {
       const q: string = spec.getQuery();
       const decoded = decodeURIComponent(q.slice(q.indexOf('=') + 1));
@@ -554,11 +472,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(buildRequestSpec("qs=init")),
       { key: "qs", source: "URL", value: "money'" },
       { context: ["html"], payload: htmlPayload },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "html"
     );
     expect(result.confirmed).toBe(true);
@@ -580,7 +493,6 @@ describe("runProbes()", () => {
         ? [{ context: 'attributeEscaped', char: ch }] : []
     );
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const needle = (ch: string) => "R".repeat(5) + encodeURIComponent(ch) + "R".repeat(5);
     const sdk = buildSdk(async () => ({ response: buildResponse(baselineBody + needle('"')) }));
     const result = await runProbes(
@@ -588,11 +500,6 @@ describe("runProbes()", () => {
       buildRequestWrapper(),
       { key: "p", source: "URL", value: "orig" },
       { context: ["attributeInQuote"], payload: ['"'] },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       'Tag Attribute (") Value'
     );
     expect(result.reflected).toBe(true);         // the char did reflect
@@ -608,7 +515,6 @@ describe("runProbes()", () => {
       body.includes(pre + ch + suf) ? [{ context: 'html', char: ch }] : []
     );
     const baselineBody = "abc";
-    const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches(baselineBody, k, true).length).join(',');
     const sdk = buildSdk(async (spec: any) => {
       // Simulate Express decoding the path segment exactly once.
       const seg = spec.getPath().split('/').pop() as string;
@@ -620,11 +526,6 @@ describe("runProbes()", () => {
       { toSpec: () => buildPathRequestSpec("/seg0/seg1") },
       { key: "path:1:seg1", source: "Path", value: "seg1" },
       { context: ["html"], payload: ["<"] },
-      [],
-      200,
-      baselineSig,
-      baselineBody,
-      KEY_WORDS_LOCAL,
       "html"
     );
     expect(result.confirmed).toBe(true);
@@ -645,17 +546,11 @@ describe("runProbes()", () => {
       mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
         body.includes(pre + ch + suf) ? [{ context: "jsInQuote", char: ch }] : []
       );
-      const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches("abc", k, true).length).join(',');
       return runProbes(
         sdk,
         buildRequestWrapper(buildRequestSpec()),
         { key: "p", source: "URL", value: "orig" },
         { context: ["jsInQuote"], payload: ["\\", '"', "'"] },
-        [],
-        200,
-        baselineSig,
-        "abc",
-        KEY_WORDS_LOCAL,
         "Script String (\")"
       );
     }
@@ -704,10 +599,9 @@ describe("runProbes()", () => {
         const v = decodeURIComponent((spec.getQuery() as string).replace(/^p=/, ""));
         return { response: buildResponse(`abc<script>${wrap(v)}</script>`) };
       });
-      const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches("abc", k, true).length).join(',');
       return runProbes(
         sdk, buildRequestWrapper(buildRequestSpec()), { key: "p", source: "URL", value: "orig" },
-        { context: ["jsInQuote"], payload: ["'", "("] }, [], 200, baselineSig, "abc", KEY_WORDS_LOCAL, label
+        { context: ["jsInQuote"], payload: ["'", "("] }, label
       );
     }
 
@@ -736,17 +630,11 @@ describe("runProbes()", () => {
       mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
         body.includes(pre + ch + suf) ? [{ context: "jsInQuote", char: ch }] : []
       );
-      const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches("abc", k, true).length).join(',');
       return runProbes(
         sdk,
         buildRequestWrapper(buildRequestSpec()),
         { key: "p", source: "URL", value: "orig" },
         { context: ["jsInQuote"], payload: ["<", "/", "'"] },
-        [],
-        200,
-        baselineSig,
-        "abc",
-        KEY_WORDS_LOCAL,
         context
       );
     }
@@ -794,17 +682,11 @@ describe("runProbes()", () => {
         body.includes(pre + ch + suf) ? [{ context: "html", char: ch }] : []
       );
       const sdk = reflectingSdk(v => v.replace(/<\//g, "&lt;/"));
-      const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches("abc", k, true).length).join(',');
       const result = await runProbes(
         sdk,
         buildRequestWrapper(buildRequestSpec()),
         { key: "p", source: "URL", value: "orig" },
         { context: ["html"], payload: ["<", "/"] },
-        [],
-        200,
-        baselineSig,
-        "abc",
-        KEY_WORDS_LOCAL,
         "html"
       );
       expect(result.successfulChars.has("<")).toBe(true);
