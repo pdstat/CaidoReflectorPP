@@ -338,3 +338,55 @@ describe('value-sensitive dedup for URL params (error-gated reflections)', () =>
         expect(r2.length).toBe(0); // deduped by name, not re-probed
     });
 });
+
+describe('reflection count from the first probe batch', () => {
+    beforeEach(() => { (reqParamsStore as any)._store = undefined; });
+
+    // Echoes the decoded qs value raw. A count probe is the only probe whose value is a
+    // bare 12-char alphanumeric marker, so those sends are recorded separately.
+    const echoSdk = (statusFor: (value: string) => number) => {
+        const countProbeValues: string[] = [];
+        const sdk = {
+            console: { log: () => {} },
+            requests: {
+                send: async (spec: any) => {
+                    const q: string = spec.getQuery?.() || '';
+                    const m = q.match(/qs=([^&]*)/);
+                    let decoded = '';
+                    try { decoded = decodeURIComponent(m?.[1] ?? ''); } catch { decoded = m?.[1] ?? ''; }
+                    if (/^[a-z0-9]{12}$/.test(decoded)) countProbeValues.push(decoded);
+                    const body = `<html><body>${decoded} | ${decoded}</body></html>`;
+                    return { response: {
+                        getCode: () => statusFor(decoded),
+                        getBody: () => ({ toText: () => body }),
+                        getHeader: (): undefined => undefined,
+                    } };
+                },
+            },
+        } as any;
+        return { sdk, countProbeValues };
+    };
+
+    test('a confirmed param sends no separate count probe', async () => {
+        const { sdk, countProbeValues } = echoSdk(() => 200);
+        const out = await checkBodyReflections(
+            { request: baseRequest('qs=reflectC'), response: makeResponse('<html><body>reflectC</body></html>') },
+            sdk
+        );
+        expect(out.length).toBeGreaterThan(0);
+        expect(countProbeValues).toHaveLength(0);
+        expect(out[0].matches).toHaveLength(2);
+        expect(out[0].value).toMatch(/^[a-z0-9]{12}$/);
+    });
+
+    test('falls back to a count probe when the first batch changed the status', async () => {
+        const { sdk, countProbeValues } = echoSdk((v) => (/['"\\`]/.test(v) ? 500 : 200));
+        const out = await checkBodyReflections(
+            { request: baseRequest('qs=reflectD'), response: makeResponse('<html><body>reflectD</body></html>') },
+            sdk
+        );
+        expect(out.length).toBeGreaterThan(0);
+        expect(countProbeValues).toHaveLength(1);
+        expect(out[0].value).toBe(countProbeValues[0]);
+    });
+});

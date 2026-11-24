@@ -20,7 +20,13 @@ export interface ProbeResult {
     reflected: boolean;
     successfulChars: Set<string>;
     bestContext: string;
+    // Reflection count of the first batch's leading marker, so a confirmed param does
+    // not need a separate count probe. Absent when the first batch got no response.
+    firstBatchCount?: CountProbeResult;
 }
+
+// Long enough that the count marker cannot collide with existing page text.
+const COUNT_MARKER_LEN = 12;
 
 export interface CountProbeResult {
     matches: Array<[number, number]>;
@@ -171,6 +177,7 @@ export async function runProbes(
     // Used after probing to escalate past a sealed context the ladder chose first.
     const htmlFamilyChars = new Map<string, Set<string>>();
     let confirmed = false; let reflected = false; let bestContext = initialBestContext;
+    let firstBatchCount: CountProbeResult | undefined;
     if (!contextInfo || !Array.isArray(contextInfo.payload) || contextInfo.payload.length === 0) {
         return { confirmed: false, reflected: false, successfulChars, bestContext };
     }
@@ -178,7 +185,11 @@ export async function runProbes(
     const BATCH = 8;
     for (let i = 0; i < orderedPayload.length; i += BATCH) {
         const batch = orderedPayload.slice(i, i + BATCH);
-        const markers = batch.map((ch: string) => ({ ch, pre: randomValue(5), suf: randomValue(5) }));
+        const markers = batch.map((ch: string, j: number) => ({
+            ch,
+            pre: randomValue(i === 0 && j === 0 ? COUNT_MARKER_LEN : 5),
+            suf: randomValue(5),
+        }));
         const injected = markers
             .map((m: { ch: string; pre: string; suf: string }) => m.pre + encodeForSource(param, m.ch) + m.suf)
             .join("");
@@ -187,6 +198,7 @@ export async function runProbes(
         sdk.console.log(`[Reflector++] Probing ${param.key} with batch [${batch.join(', ')}]`);
         try {
             const probe = await (sdk as any).requests.send(probeSpec);
+            if (i === 0) firstBatchCount = countMarker(probe, markers[0].pre, sdk);
             const ctHeader = probe.response.getHeader('Content-Type');
             const nosniffHeader = probe.response.getHeader('X-Content-Type-Options');
             const probeCtGated = passesContentTypeGating(ctHeader, nosniffHeader)
@@ -296,7 +308,13 @@ export async function runProbes(
             for (const c of best.chars) successfulChars.add(c);
         }
     }
-    return { confirmed, reflected, successfulChars, bestContext };
+    return { confirmed, reflected, successfulChars, bestContext, firstBatchCount };
+}
+
+function countMarker(probe: any, marker: string, sdk: SDK): CountProbeResult {
+    const body = probe.response.getBody()?.toText() || '';
+    const matches = findMatches(body, marker, true, sdk);
+    return { matches, value: marker, code: probe.response.getCode?.() ?? 0 };
 }
 
 export async function runCountProbe(
@@ -304,7 +322,7 @@ export async function runCountProbe(
     request: any,
     param: any
 ): Promise<CountProbeResult | undefined> {
-    const marker = randomValue(12);
+    const marker = randomValue(COUNT_MARKER_LEN);
     const probeSpec: any = request.toSpec();
     mutateParamValue(probeSpec, param, marker, sdk as any);
     sdk.console.log(
@@ -312,13 +330,11 @@ export async function runCountProbe(
     );
     try {
         const probe = await (sdk as any).requests.send(probeSpec);
-        const body = probe.response.getBody()?.toText() || '';
-        const matches = findMatches(body, marker, true, sdk);
+        const result = countMarker(probe, marker, sdk);
         sdk.console.log(
-            `[Reflector++] Count probe found ${matches.length} reflection(s)`
+            `[Reflector++] Count probe found ${result.matches.length} reflection(s)`
         );
-        const code = probe.response.getCode?.() ?? 0;
-        return { matches, value: marker, code };
+        return result;
     } catch (e) {
         (sdk as any).console.log(
             `[Reflector++] Count probe error for ${param.key}: ${e}`
