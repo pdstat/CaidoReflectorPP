@@ -27,6 +27,10 @@ jest.mock("../src/payload/responseBodyPayloadGenerator.js", () => {
         const Real = jest.requireActual("../src/payload/responseBodyPayloadGenerator.js").default;
         return new Real(this.body).isInScriptOutsideString(needle);
       }
+      isQuoteInertInScript(start: string, pre: string, ch: string, suf: string) {
+        const Real = jest.requireActual("../src/payload/responseBodyPayloadGenerator.js").default;
+        return new Real(this.body).isQuoteInertInScript(start, pre, ch, suf);
+      }
     }
   };
 });
@@ -673,7 +677,8 @@ describe("runProbes()", () => {
       expect(result.confirmed).toBe(true);
       expect(result.successfulChars.has("\\")).toBe(false);
       expect(result.successfulChars.has('"')).toBe(false);
-      expect(result.successfulChars.has("'")).toBe(true);
+      // "'" sits inside the server's own "-string: inert (foreign-quote rule).
+      expect(result.successfulChars.has("'")).toBe(false);
     });
 
     test("keeps \\ when the combo response lacks the markers (blocked)", async () => {
@@ -686,6 +691,35 @@ describe("runProbes()", () => {
       const sdk = scriptSdk(escapesBoth, v => v.includes('\\"'));
       const result = await probeBackslash(sdk);
       expect(result.successfulChars.has("\\")).toBe(true);
+    });
+  });
+
+  describe("foreign-quote JS string", () => {
+    // randomValue is mocked to "R".repeat(n), so every marker shares the prefix "RRRRR".
+    async function probeQuotes(wrap: (v: string) => string, label: string) {
+      mockDetectImpl.mockImplementation((pre, ch, suf, body) =>
+        body.includes(pre + ch + suf) ? [{ context: "jsInQuote", char: ch }] : []
+      );
+      const sdk = buildSdk(async (spec: any) => {
+        const v = decodeURIComponent((spec.getQuery() as string).replace(/^p=/, ""));
+        return { response: buildResponse(`abc<script>${wrap(v)}</script>`) };
+      });
+      const baselineSig = KEY_WORDS_LOCAL.map(k => findMatches("abc", k, true).length).join(',');
+      return runProbes(
+        sdk, buildRequestWrapper(buildRequestSpec()), { key: "p", source: "URL", value: "orig" },
+        { context: ["jsInQuote"], payload: ["'", "("] }, [], 200, baselineSig, "abc", KEY_WORDS_LOCAL, label
+      );
+    }
+
+    test("drops ' reflected inside a pre-existing double-quoted string", async () => {
+      const result = await probeQuotes(v => `var h = "<a href=\\"/s?oq=${v}\\">x</a>";`, "Script String (')");
+      expect(result.successfulChars.has("'")).toBe(false);
+      expect(result.successfulChars.has("(")).toBe(true);
+    });
+
+    test("keeps ' that closes its own single-quoted string", async () => {
+      const result = await probeQuotes(v => `var q = '${v}';`, "Script String (')");
+      expect(result.successfulChars.has("'")).toBe(true);
     });
   });
 

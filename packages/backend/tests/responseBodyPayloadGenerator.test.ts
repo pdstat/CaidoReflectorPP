@@ -1382,3 +1382,38 @@ describe("quote inside an attribute value keeps counting", () => {
         expect(d).toContain("html");
     });
 });
+
+describe("isQuoteInertInScript", () => {
+    const inert = (body: string, start: string, ch: string) =>
+        new ResponseBodyPayloadGenerator(body).isQuoteInertInScript(start, "AAAAA", ch, "BBBBB");
+
+    test("' inside a pre-existing double-quoted string is inert", () => {
+        expect(inert(`<script>var h = "<a href=\\"/s?oq=PPPPPxAAAAA'BBBBB\\">x</a>";</script>`, "PPPPP", "'")).toBe(true);
+    });
+
+    test('a double quote inside a pre-existing single-quoted string is inert', () => {
+        expect(inert(`<script>var h = 'PPPPPAAAAA"BBBBB';</script>`, "PPPPP", '"')).toBe(true);
+    });
+
+    test("' closing its own single-quoted string is not inert", () => {
+        expect(inert(`<script>var q = 'PPPPPAAAAA'BBBBB';</script>`, "PPPPP", "'")).toBe(false);
+    });
+
+    test("a string opened by the probe batch itself does not make the quote inert", () => {
+        // code position: an earlier batch marker's ' opened the string around the " marker
+        expect(inert(`<script>var x = PPPPP'QQQQQAAAAA"BBBBB;</script>`, "PPPPP", '"')).toBe(false);
+    });
+
+    test("code position is not inert", () => {
+        expect(inert(`<script>var x = PPPPPAAAAA'BBBBB;</script>`, "PPPPP", "'")).toBe(false);
+    });
+
+    test("one same-quote occurrence keeps it live", () => {
+        const body = `<script>var a = "PPPPPAAAAA'BBBBB"; var b = 'PPPPPAAAAA'BBBBB';</script>`;
+        expect(inert(body, "PPPPP", "'")).toBe(false);
+    });
+
+    test("no script occurrence is not inert", () => {
+        expect(inert(`<p>AAAAA'BBBBB</p>`, "AAAAA", "'")).toBe(false);
+    });
+});

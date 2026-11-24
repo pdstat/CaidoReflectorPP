@@ -70,6 +70,11 @@ function severityOf(contextLabel: string, chars: Set<string>): SeverityTier {
     });
 }
 
+// A quote char inside a JS string with a different delimiter cannot end it; these script
+// detections are dropped for it (the char may still count in HTML/attribute contexts).
+const QUOTE_CHARS = new Set(["'", '"', "`"]);
+const JS_STRING_DETECTIONS = new Set(["jsInQuote", "jsInQuoteEscaped", "js", "jsTemplateLiteral"]);
+
 // Script contexts where a lone "<" only matters as the start of "</script". Many
 // serializers (Marko, Next.js, serialize-javascript, PHP json_encode) escape the
 // "</" sequence (or "/") while leaving a lone "<" and "/" raw, so per-char probes
@@ -222,7 +227,12 @@ export async function runProbes(
                 const foundDecoded = findMatches(probeBody, decodedNeedle, true, sdk).length > 0;
                 if (!foundEncoded && !foundDecoded) continue;
                 reflected = true;
-                const detections = detectPg.detect({ console: (sdk as any).console }, { context: contextInfo.context }, m.pre, m.ch, m.suf);
+                let detections = detectPg.detect({ console: (sdk as any).console }, { context: contextInfo.context }, m.pre, m.ch, m.suf);
+                if (QUOTE_CHARS.has(m.ch) && typeof (detectPg as any).isQuoteInertInScript === 'function'
+                    && (detectPg as any).isQuoteInertInScript(markers[0].pre, m.pre, m.ch, m.suf)) {
+                    sdk.console.log(`[Reflector++] "${m.ch}" for ${param.key} sits in a foreign-quote JS string; inert`);
+                    detections = detections.filter((d: any) => !JS_STRING_DETECTIONS.has(d.context));
+                }
                 if (detections.length > 0) {
                     confirmed = true;
                     const acceptedCtx = allowedDetectionContextsFor(bestContext);
