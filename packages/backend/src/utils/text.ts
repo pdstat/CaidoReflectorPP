@@ -71,7 +71,7 @@ export const findMatches = (text: string | undefined, substring: string, fromPro
 };
 
 
-export function encVariants(raw: string): { url: string; html: string; jsUniPieces: string[] } {
+export function encVariants(raw: string): { url: string; html: string } {
   const url = encodeURIComponent(raw);
   const html = raw
     .replace(/&/g, '&amp;')
@@ -79,12 +79,7 @@ export function encVariants(raw: string): { url: string; html: string; jsUniPiec
     .replace(/'/g, '&#39;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  const jsUniPieces: string[] = [];
-  for (const ch of raw) {
-    const cp = ch.codePointAt(0)!;
-    jsUniPieces.push('\\u' + cp.toString(16).padStart(4, '0').toUpperCase());
-  }
-  return { url, html, jsUniPieces };
+  return { url, html };
 }
 
 // Count occurrences of each keyword string in given text using findMatches logic.
