@@ -466,3 +466,31 @@ describe("generateReport — new contexts", () => {
     expect(out).toContain("@import");
   });
 });
+
+describe("generateReport - standalone JS response PoC", () => {
+  const mk = (over: any): any => ({
+    name: "cbName", matches: [[10, 14]], context: "jsInQuote",
+    aggressive: ['"', '<'], source: "URL", value: "x", severity: "critical",
+    confirmed: true, ...over,
+  });
+
+  test("JS-string reflection in a JS response suggests a JS-only breakout, not </script>", () => {
+    const out = generateReport(mk({ isJsResponse: true }));
+    expect(out).toContain("String breakout");
+    expect(out).not.toContain("</script>");
+    expect(out).not.toContain("script escape via `<`");
+    expect(out).toContain('Test: `"-alert(1)-"`');
+  });
+
+  test("the same reflection inline (not a JS response) keeps the </script> PoC", () => {
+    const out = generateReport(mk({ isJsResponse: false }));
+    expect(out).toContain("script escape via `<`");
+    expect(out).toContain('Test: `"</script><svg onload=alert(1)>`');
+  });
+
+  test("code-position reflection in a JS response suggests direct execution", () => {
+    const out = generateReport(mk({ context: "js", aggressive: [";", "(", ")"], isJsResponse: true }));
+    expect(out).toContain("executable script position");
+    expect(out).toContain("Test: `;alert(1)//`");
+  });
+});

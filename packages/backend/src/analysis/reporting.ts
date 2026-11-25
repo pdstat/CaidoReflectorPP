@@ -46,7 +46,8 @@ function generateAssessment(
   context: string,
   chars: string[],
   headers?: string[],
-  redirectPosition?: RedirectPosition
+  redirectPosition?: RedirectPosition,
+  isJsResponse?: boolean
 ): string {
   const canonical = toCanonical(context) ?? context;
   const hasQuote = chars.includes('"') || chars.includes("'");
@@ -69,12 +70,14 @@ function generateAssessment(
   if (canonical === CONTEXT.JS_IN_QUOTE) {
     const parts: string[] = [];
     if (hasQuote) parts.push(`String breakout via \`${quote}\``);
-    if (hasLt) parts.push("script escape via `<`");
+    // In a standalone JS response the browser never parses HTML, so "</script>" is inert.
+    if (hasLt && !isJsResponse) parts.push("script escape via `<`");
     if (parts.length) return parts.join(", ");
     return "Script string reflection, no breakout chars confirmed";
   }
   if (canonical === CONTEXT.JS) {
-    if (hasLt) return "Script escape via `<`";
+    if (hasLt && !isJsResponse) return "Script escape via `<`";
+    if (isJsResponse) return "Reflection in executable script position (code execution)";
     return "Script reflection, no breakout chars confirmed";
   }
   if (canonical === CONTEXT.EVENT_HANDLER) {
@@ -193,7 +196,8 @@ function generateTestPayload(
   context: string,
   chars: string[],
   headers?: string[],
-  redirectPosition?: RedirectPosition
+  redirectPosition?: RedirectPosition,
+  isJsResponse?: boolean
 ): string | undefined {
   const canonical = toCanonical(context) ?? context;
   const hasQuote = chars.includes('"') || chars.includes("'");
@@ -208,20 +212,23 @@ function generateTestPayload(
   }
   if (canonical === CONTEXT.JS_TEMPLATE_LITERAL) {
     if (chars.includes('$') && chars.includes('{')) return `\${alert(1)}`;
-    if (chars.includes('`') && hasLt) return `\`</script><svg onload=alert(1)>`;
+    if (chars.includes('`') && hasLt && !isJsResponse) return `\`</script><svg onload=alert(1)>`;
     if (chars.includes('`')) return `\`-alert(1)-\``;
     return undefined;
   }
   if (canonical === CONTEXT.JS_IN_QUOTE) {
-    if (hasQuote && hasLt) {
+    // "</script>" only escapes an inline <script>; in a standalone JS response it is inert,
+    // so fall through to the pure-JS string breakout.
+    if (hasQuote && hasLt && !isJsResponse) {
       return `${quote}</script><svg onload=alert(1)>`;
     }
     if (hasQuote) return `${quote}-alert(1)-${quote}`;
-    if (hasLt) return `</script><svg onload=alert(1)>`;
+    if (hasLt && !isJsResponse) return `</script><svg onload=alert(1)>`;
     return undefined;
   }
   if (canonical === CONTEXT.JS) {
-    if (hasLt) return `</script><svg onload=alert(1)>`;
+    if (hasLt && !isJsResponse) return `</script><svg onload=alert(1)>`;
+    if (isJsResponse) return `;alert(1)//`;
     return undefined;
   }
   if (canonical === CONTEXT.EVENT_HANDLER) {
@@ -381,11 +388,11 @@ export function generateReport(
 
   const assessment = generateAssessment(
     param.context, param.aggressive ?? [], param.headers,
-    param.redirectPosition
+    param.redirectPosition, param.isJsResponse
   );
   const payload = generateTestPayload(
     param.context, param.aggressive ?? [], param.headers,
-    param.redirectPosition
+    param.redirectPosition, param.isJsResponse
   );
   const quoteParts = [assessment];
   if (payload) quoteParts.push(`Test: \`${payload}\``);

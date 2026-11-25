@@ -162,7 +162,7 @@ async function checkParameter(scan: BodyScan, param: any): Promise<ReflectedPara
     // Reflection confirmed here: dedupe this param by name from now on, so
     // later values are not re-probed now that a finding exists for it.
     reqParamsStore.get().markConfirmed(endpoint, param as any);
-    return { name: param.key, matches: finalMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, value: finalValue, confirmed: true, severity: grade.severity, otherContexts };
+    return { name: param.key, matches: finalMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, value: finalValue, confirmed: true, severity: grade.severity, otherContexts, isJsResponse: scan.isJsResponse };
   }
   unconfirmed();
   if (scan.logUnconfirmed && reflected) {
