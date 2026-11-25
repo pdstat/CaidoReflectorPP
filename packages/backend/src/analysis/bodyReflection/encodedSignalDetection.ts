@@ -7,6 +7,13 @@ import { CONTEXT } from "../contextMap.js";
 
 type SDK = any;
 
+// Decodes JSON \uXXXX escapes. An escaped backslash (\\) is kept as is, so "\\u0041" stays
+// the literal text \u0041 rather than becoming "A".
+function decodeJsonUnicodeEscapes(s: string): string {
+    return s.replace(/\\(\\|u([0-9a-fA-F]{4}))/g, (m: string, _esc: string, hex?: string) =>
+        hex ? String.fromCharCode(parseInt(hex, 16)) : m);
+}
+
 export function detectEncodedOnly(
     sdk: SDK,
     input: any,
@@ -15,18 +22,18 @@ export function detectEncodedOnly(
     paramValue: string,
     bodyText: string
 ): boolean { // returns true if encoded-only signal recorded
-    const { url, html, jsUniPieces } = encVariants(paramValue);
+    const { url, html } = encVariants(paramValue);
     const urlHitCount = findMatches(bodyText, url, false, sdk).length;
     const htmlHitCount = findMatches(bodyText, html, false, sdk).length;
     let jsonUniHitCount = 0;
     const jsonScriptRegex = /<script[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
     let m: RegExpExecArray | null;
-    while ((m = jsonScriptRegex.exec(bodyText)) !== null) { 
+    while ((m = jsonScriptRegex.exec(bodyText)) !== null) {
+        // The value has no literal echo anywhere in the body (the caller checked), so a match
+        // in the unescaped JSON is an echo that went through at least one \uXXXX escape.
         const txt = m[1] || "";
-        for (const piece of jsUniPieces) { 
-            if (findMatches(txt, piece, false, sdk).length > 0) 
-                jsonUniHitCount++;
-        }
+        const decoded = decodeJsonUnicodeEscapes(txt);
+        if (decoded !== txt) jsonUniHitCount += findMatches(decoded, paramValue, false, sdk).length;
     }
     if (urlHitCount || htmlHitCount || jsonUniHitCount) {
         const contexts: string[] = []; const evidence: string[] = [];

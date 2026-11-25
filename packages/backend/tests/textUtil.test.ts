@@ -41,18 +41,10 @@ describe('text utilities', () => {
   });
 
   describe('encVariants', () => {
-    test('encodes URL and HTML entities and Unicode pieces', () => {
-      const { url, html, jsUniPieces } = encVariants("<a&>");
+    test('encodes URL and HTML entities', () => {
+      const { url, html } = encVariants("<a&>");
       expect(url).toBe(encodeURIComponent('<a&>'));
       expect(html).toBe('&lt;a&amp;&gt;');
-      expect(jsUniPieces).toEqual(['\\u003C','\\u0061','\\u0026','\\u003E']);
-    });
-
-    test('unicode astral symbols produce \\uXXXX sequence per code point', () => {
-      const s = 'A😀'; // 'A' + surrogate pair U+1F600
-      const { jsUniPieces } = encVariants(s);
-      // Each JavaScript iteration yields a full code point (A + 😀)
-      expect(jsUniPieces).toEqual(['\\u0041','\\u1F600']);
     });
   });
 
