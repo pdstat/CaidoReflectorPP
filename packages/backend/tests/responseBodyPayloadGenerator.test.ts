@@ -1417,3 +1417,30 @@ describe("isQuoteInertInScript", () => {
         expect(inert(`<p>AAAAA'BBBBB</p>`, "AAAAA", "'")).toBe(false);
     });
 });
+
+describe("event handler nested-string flag", () => {
+    const ctxOf = (html: string, v = "VAL"): string[] =>
+        new ResponseBodyPayloadGenerator(html).generate(sdk() as any, v).context;
+
+    test("a value inside a nested single-quoted string flags the delimiter", () => {
+        const c = ctxOf(`<button onclick="doSomething('VAL')">x</button>`);
+        expect(c).toContain("eventHandlerAttrInQuote");
+        expect(c).toContain("eventHandlerNestedString:'");
+    });
+
+    test("a value inside a nested double-quoted string flags the delimiter", () => {
+        const c = ctxOf(`<button onclick='doSomething("VAL")'>x</button>`);
+        expect(c).toContain('eventHandlerNestedString:"');
+    });
+
+    test("a value in code position within the handler is not flagged", () => {
+        const c = ctxOf(`<button onclick="doSomething(VAL)">x</button>`);
+        expect(c).toContain("eventHandlerAttrInQuote");
+        expect(c.some((x) => x.startsWith("eventHandlerNestedString"))).toBe(false);
+    });
+
+    test("a value inside a template literal is not flagged (${} holes execute)", () => {
+        const c = ctxOf("<button onclick=\"doSomething(`x${y}VAL`)\">z</button>");
+        expect(c.some((x) => x.startsWith("eventHandlerNestedString"))).toBe(false);
+    });
+});

@@ -320,6 +320,22 @@ export async function runProbes(
             if (!hasExploitable) confirmed = false;
         }
     }
+    // Event-handler nested-string gate (parallels the JSON block above): when the value
+    // sits inside a JS string literal within an on* handler (onclick="f('VAL')"), the
+    // code-position chars ( ; ( ) & space ), a bare "\\", and the non-enclosing quote are
+    // trapped inside that string -- only the string's own delimiter breaks out. Drop the
+    // trapped survivors; if nothing exploitable remains, the reflection is not confirmed.
+    const ehNested = ctxArr.find((c: string) => typeof c === "string" && c.startsWith("eventHandlerNestedString:"));
+    if (confirmed && ehNested) {
+        const delim = ehNested.slice("eventHandlerNestedString:".length);
+        if (!successfulChars.has(delim)) {
+            for (const sc of [";", "(", ")", "&", " ", "\\", '"', "'"]) {
+                if (sc !== delim) successfulChars.delete(sc);
+            }
+            const hasExploitable = [...successfulChars].some(c => c !== "");
+            if (!hasExploitable) confirmed = false;
+        }
+    }
     // Escalate to a live HTML-family context when the ladder chose a sealed context.
     // Report the worst breakout that actually works: if a tag-opening char survived in
     // HTML text (or SVG/MathML/rawtext/comment) and scores higher than the chosen

@@ -366,6 +366,22 @@ const ResponseBodyPayloadGenerator = class {
 		const open = this._quoteOpenTable(src)[Math.max(0, Math.min(idxStart, src.length))];
 		return { quote: open === -1 ? null : (src[open] as '"' | "'" | "`"), open };
 	}
+	// For a value reflected inside an on* handler, the delimiter of the JS string literal
+	// enclosing it (onclick="f('VAL')"), or null in code position. When the value reflects
+	// in several spots, a code-position occurrence wins (null): that one is directly
+	// executable. Only " and ' are reported -- a template literal (`) has ${} code holes,
+	// so its chars are not trapped and it must not be gated.
+	private _handlerValueStringDelimiter(handlerValue: string, reflectedValue: string): '"' | "'" | null {
+		let delim: '"' | "'" | null = null;
+		let pos = handlerValue.indexOf(reflectedValue);
+		while (pos !== -1) {
+			const q = this._jsQuoteOpenAt(handlerValue, pos).quote;
+			if (q === null || q === "`") return null;
+			if (delim === null) delim = q;
+			pos = handlerValue.indexOf(reflectedValue, pos + 1);
+		}
+		return delim;
+	}
 
 	// True when a probed quote char lands, in every executable-script occurrence, inside a
 	// JS string delimited by a DIFFERENT quote that was already open before the probe value
@@ -1893,6 +1909,12 @@ const ResponseBodyPayloadGenerator = class {
 					this._addJsHandlerProbes(payloadSet);
 					payloadSet.add("");
 				}
+				// A value nested in a JS string literal within the handler
+				// (onclick="f('VAL')") can only break out with that string's delimiter; the
+				// code-position chars ( ; ( ) & ) are trapped. Flag it with the delimiter so
+				// runProbes drops those inert survivors.
+				const delim = raw ? this._handlerValueStringDelimiter(raw.value, reflectedValue) : null;
+				if (delim) contextSet.add("eventHandlerNestedString:" + delim);
 				return;
 			}
 			if (lower === "style") {
