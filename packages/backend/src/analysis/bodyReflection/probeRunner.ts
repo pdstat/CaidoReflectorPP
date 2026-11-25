@@ -165,6 +165,41 @@ export function orderPayloadBreakoutFirst(payload: string[]): string[] {
     });
 }
 
+const BATCH = 8;
+
+interface Marker { ch: string; pre: string; suf: string }
+
+interface SentBatch {
+    i: number;
+    markers: Marker[];
+    outcome: Promise<{ probe: any } | { error: unknown }>;
+}
+
+// Sends one probe per batch of up to BATCH chars, each char wrapped in random markers.
+// Outcomes are pre-settled so a rejection is never unhandled while earlier batches are
+// still being analysed.
+function buildBatches(sdk: SDK, request: any, param: any, orderedPayload: string[]): SentBatch[] {
+    const out: SentBatch[] = [];
+    for (let i = 0; i < orderedPayload.length; i += BATCH) {
+        const batch = orderedPayload.slice(i, i + BATCH);
+        const markers = batch.map((ch: string, j: number) => ({
+            ch,
+            pre: randomValue(i === 0 && j === 0 ? COUNT_MARKER_LEN : 5),
+            suf: randomValue(5),
+        }));
+        const injected = markers.map((m) => m.pre + encodeForSource(param, m.ch) + m.suf).join("");
+        const probeSpec: any = request.toSpec();
+        mutateParamValue(probeSpec, param, injected, sdk as any);
+        sdk.console.log(`[Reflector++] Probing ${param.key} with batch [${batch.join(', ')}]`);
+        const outcome = (sdk as any).requests.send(probeSpec).then(
+            (probe: any) => ({ probe }),
+            (error: unknown) => ({ error }),
+        );
+        out.push({ i, markers, outcome });
+    }
+    return out;
+}
+
 export async function runProbes(
     sdk: SDK,
     request: any,
@@ -182,22 +217,15 @@ export async function runProbes(
         return { confirmed: false, reflected: false, successfulChars, bestContext };
     }
     const orderedPayload = orderPayloadBreakoutFirst(contextInfo.payload);
-    const BATCH = 8;
-    for (let i = 0; i < orderedPayload.length; i += BATCH) {
-        const batch = orderedPayload.slice(i, i + BATCH);
-        const markers = batch.map((ch: string, j: number) => ({
-            ch,
-            pre: randomValue(i === 0 && j === 0 ? COUNT_MARKER_LEN : 5),
-            suf: randomValue(5),
-        }));
-        const injected = markers
-            .map((m: { ch: string; pre: string; suf: string }) => m.pre + encodeForSource(param, m.ch) + m.suf)
-            .join("");
-        const probeSpec: any = request.toSpec();
-        mutateParamValue(probeSpec, param, injected, sdk as any);
-        sdk.console.log(`[Reflector++] Probing ${param.key} with batch [${batch.join(', ')}]`);
+    // All batches are sent at once (the probe limiter caps how many are in flight), then
+    // their responses are analysed in batch order so the result does not depend on which
+    // response arrives first.
+    const batches = buildBatches(sdk, request, param, orderedPayload);
+    for (const { i, markers, outcome } of batches) {
         try {
-            const probe = await (sdk as any).requests.send(probeSpec);
+            const settled = await outcome;
+            if ('error' in settled) throw settled.error;
+            const probe = settled.probe;
             if (i === 0) firstBatchCount = countMarker(probe, markers[0].pre, sdk);
             const ctHeader = probe.response.getHeader('Content-Type');
             const nosniffHeader = probe.response.getHeader('X-Content-Type-Options');

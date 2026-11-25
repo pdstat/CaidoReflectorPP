@@ -16,6 +16,7 @@ import { mergeEncodedSignals } from "./analysis/mergeEncodedSignals.js";
 import { CONTEXT } from "./analysis/contextMap.js";
 import { getEncodedSignals } from "./analysis/encodedSignalsStore.js";
 import { ConfigStore } from "./stores/configStore.js";
+import { probeLimiter, scanSdk, isScanAborted, type Scan } from "./net/probeLimiter.js";
 
 type ReflectedParameter = AnalyzedReflectedParameter;
 
@@ -28,6 +29,12 @@ const analyticsEndpointsSet = COMMON_ANALYTICS_ENDPOINTS_SET;
  * @param {SDK} sdk
  * @returns {MaybePromise<Data | undefined>}
  */
+function dropAbortedScan(scan: Scan, sdk: SDK): void {
+    for (const release of scan.onAbort) release();
+    sdk.console.log(`[Reflector++] Scan ${scan.id} dropped (${scan.abortReason}); `
+        + `its params will be retested on the next request`);
+}
+
 export async function run(
     input: HttpInput,
     sdk: SDK
@@ -60,14 +67,19 @@ export async function run(
     sdk.console.log(`[Reflector++] Starting scan (No-Sniff Content Types: ${Array.from(noSniffContentTypes).join(", ")})`);
     sdk.console.log("=====================================");
 
+    // Every probe of this scan goes through the per-domain limiter via probeSdk.
+    const scan = probeLimiter.beginScan((msg) => sdk.console.log(msg));
+    const probeSdk = scanSdk(sdk, scan);
+
     // 1. Always attempt header reflection detection regardless of content-type gating unless disabled
     const checkResponseHeaderReflections = ConfigStore.getCheckResponseHeaderReflections();
-    const headerReflections = checkResponseHeaderReflections ? await checkHeaderReflections(request, response, sdk) : [];
+    const headerScan: Promise<ReflectedParameter[]> = checkResponseHeaderReflections
+        ? checkHeaderReflections(request, response, probeSdk)
+        : Promise.resolve([]);
 
     // 2. Apply body/content related gating only for body reflection scanning
     const rawContentType = response.getHeader("Content-Type");
     const rawNoSniff = response.getHeader("X-Content-Type-Options");
-    let bodyReflections: ReflectedParameter[] = [];
     const proceedBody = (() => {
         const ctGated = passesContentTypeGating(rawContentType, rawNoSniff)
             || (ConfigStore.getCheckJsResponseReflections() && isJsContentType(rawContentType));
@@ -82,9 +94,24 @@ export async function run(
 
     if (!proceedBody) {
         sdk.console.log("[Reflector++] Body reflection scan skipped due to gating checks; header results retained.");
-    } else {
-    bodyReflections = await checkBodyReflections(input, sdk, LOG_UNCONFIRMED_FINDINGS);
     }
+    const bodyScan: Promise<ReflectedParameter[]> = proceedBody
+        ? checkBodyReflections(input, probeSdk, LOG_UNCONFIRMED_FINDINGS)
+        : Promise.resolve([]);
+
+    let results: [ReflectedParameter[], ReflectedParameter[]] | undefined;
+    try {
+        results = await Promise.all([headerScan, bodyScan]);
+    } catch (e) {
+        if (!isScanAborted(e)) throw e;
+    }
+    // A probe failure can be swallowed inside the checks, so the scan's own flag is the
+    // authority: an aborted scan's results are partial and must not become a finding.
+    if (!results || scan.abortReason) {
+        dropAbortedScan(scan, sdk);
+        return;
+    }
+    const [headerReflections, bodyReflections] = results;
 
     const reflectedParameters = [...headerReflections, ...bodyReflections];
 

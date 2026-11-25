@@ -8,6 +8,11 @@ const CHECK_HEADER_REFLECTIONS_STORAGE_KEY = "checkResponseHeaderReflections"
 const CHECK_JS_RESPONSE_REFLECTIONS_STORAGE_KEY = "checkJsResponseReflections"
 const CONTENT_TYPES_STORAGE_KEY = "noSniffContentTypes"
 const PATH_BLOCKLIST_STORAGE_KEY = "pathBlocklist"
+const PROBE_CONCURRENCY_STORAGE_KEY = "probeConcurrency"
+const PROBE_RATE_STORAGE_KEY = "probeRatePerSecond"
+
+export const DEFAULT_PROBE_CONCURRENCY = 2
+export const DEFAULT_PROBE_RATE_PER_SECOND = 5
 
 export class PluginSettings {
 
@@ -111,6 +116,25 @@ export class PluginSettings {
     public async setPathBlocklist(value: string[]): Promise<void> {
         await this.sdk.backend.setPathBlocklist(JSON.stringify(value));
         return this.set<string[]>(PATH_BLOCKLIST_STORAGE_KEY, value);
+    }
+
+    public getProbeConcurrency(): number {
+        return this.get<number>(PROBE_CONCURRENCY_STORAGE_KEY, DEFAULT_PROBE_CONCURRENCY);
+    }
+
+    // The backend validates the value and rejects it before anything is stored.
+    public async setProbeConcurrency(value: number): Promise<void> {
+        await this.sdk.backend.setProbeConcurrency(value);
+        return this.set<number>(PROBE_CONCURRENCY_STORAGE_KEY, value);
+    }
+
+    public getProbeRatePerSecond(): number {
+        return this.get<number>(PROBE_RATE_STORAGE_KEY, DEFAULT_PROBE_RATE_PER_SECOND);
+    }
+
+    public async setProbeRatePerSecond(value: number): Promise<void> {
+        await this.sdk.backend.setProbeRatePerSecond(value);
+        return this.set<number>(PROBE_RATE_STORAGE_KEY, value);
     }
 
 };

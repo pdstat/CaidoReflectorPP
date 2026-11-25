@@ -20,5 +20,10 @@
     "tailwindcss": "3.4.13",
     "tailwindcss-primeui": "0.3.4",
     "typescript": "^5.9.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "tldts-core": "7.4.19"
+    }
   }
 }

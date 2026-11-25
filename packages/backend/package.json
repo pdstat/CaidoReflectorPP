@@ -16,5 +16,8 @@
     "jest": "^30.2.0",
     "ts-jest": "^29.4.4",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "tldts": "7.4.19"
   }
 }

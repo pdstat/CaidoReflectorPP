@@ -36,6 +36,15 @@ const reqParamsStore = class _reqParamsStore extends BaseTrackedParamStore {
     markConfirmed(endpoint: string, param: TrackedParam): void {
         this.confirmed.add(this.nameKey(endpoint, param));
     }
+
+    // Forgets params a scan enumerated but did not finish testing (it was aborted), so
+    // the next request carrying them is probed again instead of being deduped.
+    release(endpoint: string, params: TrackedParam[]): void {
+        for (const p of params) {
+            this.remove(endpoint, p, true);
+            this.confirmed.delete(this.nameKey(endpoint, p));
+        }
+    }
 };
 
 export { reqParamsStore };

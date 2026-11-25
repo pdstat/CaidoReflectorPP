@@ -5,6 +5,7 @@ import { ConfigStore } from "../../stores/configStore.js";
 import { errorParamsStore } from "../../stores/errorStore.js";
 import { mutateParamValue } from "../../utils/query.js";
 import { KEY_WORDS } from "../../core/constants.js";
+import { isScanAborted } from "../../net/probeLimiter.js";
 
 // Lightweight SDK-ish type hints (avoid direct import to skirt type module issues)
 interface SDKLike {
@@ -22,6 +23,7 @@ export const sendProbe = async (
     sdk.console.log(`[Reflector++] Sending probe request...`);
     return await sdk.requests.send(requestSpec);
   } catch (e) {
+    if (isScanAborted(e)) throw e;
     throw `sendProbe threw error: ${e}`;
   }
 };
@@ -70,6 +72,7 @@ export const modifyAmbiguousParameters = async (
     }
     sdk.console.log("[Reflector++] Bulk stabilisation not stable; falling back to per-parameter refinement.");
   } catch (e) {
+    if (isScanAborted(e)) throw e;
     sdk.console.log(`[Reflector++] Bulk stabilisation probe failed (${e}); falling back to per-parameter refinement.`);
   }
 
@@ -89,6 +92,8 @@ export const modifyAmbiguousParameters = async (
         errStore.addParam(endpoint, params[i]);
       }
     } catch (e) {
+      // An aborted scan says nothing about the param itself; don't blocklist it.
+      if (isScanAborted(e)) throw e;
       errStore.addParam(endpoint, params[i]);
     }
   }

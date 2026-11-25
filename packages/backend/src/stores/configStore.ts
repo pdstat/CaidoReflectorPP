@@ -22,6 +22,10 @@ export class ConfigStore {
 
     private _pathBlocklist: string[] = [];
 
+    private _probeConcurrency = 2;
+
+    private _probeRatePerSecond = 5;
+
     static getEnabled(): boolean {
         return ConfigStore.instance._enabled;
     }
@@ -92,6 +96,29 @@ export class ConfigStore {
 
     static setPathBlocklist(value: string[]) {
         ConfigStore.instance._pathBlocklist = value;
+    }
+
+    static getProbeConcurrency(): number {
+        return ConfigStore.instance._probeConcurrency;
+    }
+
+    static setProbeConcurrency(value: number) {
+        if (!Number.isInteger(value) || value < 1 || value > 50) {
+            throw new Error(`Probe concurrency must be an integer from 1 to 50, got ${value}`);
+        }
+        ConfigStore.instance._probeConcurrency = value;
+    }
+
+    static getProbeRatePerSecond(): number {
+        return ConfigStore.instance._probeRatePerSecond;
+    }
+
+    // 0 means no rate cap (only the concurrency limit applies).
+    static setProbeRatePerSecond(value: number) {
+        if (!Number.isFinite(value) || value < 0 || value > 1000) {
+            throw new Error(`Probe rate must be a number from 0 to 1000 requests/s, got ${value}`);
+        }
+        ConfigStore.instance._probeRatePerSecond = value;
     }
 
     static getPassiveReflectionsOnly(): boolean {

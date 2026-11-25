@@ -3,8 +3,10 @@ import Card from "primevue/card"
 import Textarea from "primevue/textarea"
 import Button from "primevue/button"
 import ToggleSwitch from 'primevue/toggleswitch';
+import InputNumber from "primevue/inputnumber"
 import { ref, onMounted, watch } from "vue"
 import { Reflector } from "@/types"
+import { DEFAULT_PROBE_CONCURRENCY, DEFAULT_PROBE_RATE_PER_SECOND } from "@/settings"
 
 const enabled = ref(true)
 const probeOutOfScope = ref(false)
@@ -13,6 +15,9 @@ const checkJsResponseReflections = ref(true)
 const logUnconfirmedFindings = ref(false)
 const noSniffContentTypes = ref<string>("")
 const pathBlocklist = ref<string>("")
+const probeConcurrency = ref<number>(DEFAULT_PROBE_CONCURRENCY)
+const probeRatePerSecond = ref<number>(DEFAULT_PROBE_RATE_PER_SECOND)
+const limitsError = ref("")
 const loaded = ref(false)
 const settings = Reflector.settings
 
@@ -69,6 +74,10 @@ onMounted(async () => {
     logUnconfirmedFindings.value = settings.getLogUnconfirmedFindings() === true
     noSniffContentTypes.value = Array.from(settings.getNoSniffContentTypes()).sort().join("\n")
     pathBlocklist.value = settings.getPathBlocklist().join("\n")
+    probeConcurrency.value = settings.getProbeConcurrency()
+    probeRatePerSecond.value = settings.getProbeRatePerSecond()
+    await saveLimits(() => settings.setProbeConcurrency(probeConcurrency.value))
+    await saveLimits(() => settings.setProbeRatePerSecond(probeRatePerSecond.value))
     settings.setEnabled(enabled.value)
     settings.setCheckResponseHeaderReflections(checkResponseHeaderReflections.value)
     settings.setCheckJsResponseReflections(checkJsResponseReflections.value)
@@ -100,6 +109,28 @@ watch(checkResponseHeaderReflections, async (v) => {
 watch(checkJsResponseReflections, async (v) => {
     if (loaded.value) {
         await settings.setCheckJsResponseReflections(v)
+    }
+})
+
+// The backend rejects out-of-range values; show its message instead of failing silently.
+async function saveLimits(save: () => Promise<void>) {
+    try {
+        await save()
+        limitsError.value = ""
+    } catch (e) {
+        limitsError.value = `${e}`
+    }
+}
+
+watch(probeConcurrency, async (v) => {
+    if (loaded.value && v !== null) {
+        await saveLimits(() => settings.setProbeConcurrency(v))
+    }
+})
+
+watch(probeRatePerSecond, async (v) => {
+    if (loaded.value && v !== null) {
+        await saveLimits(() => settings.setProbeRatePerSecond(v))
     }
 })
 
@@ -162,6 +193,28 @@ watch(logUnconfirmedFindings, async (v) => {
                                 <ToggleSwitch v-model="logUnconfirmedFindings" :disabled="!loaded" />
                                 <label class="text-sm cursor-pointer select-none">Log unconfirmed (encoded) findings</label>
                             </div>
+                        </div>
+
+                        <div class="flex flex-col gap-3">
+                            <label class="text-lg block">
+                                Probe Limits<br />
+                                <span class="text-sm text-muted">
+                                    Shared by every scan hitting the same registrable domain
+                                    (e.g. api.example.com and www.example.com).
+                                </span>
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <InputNumber v-model="probeConcurrency" :min="1" :max="50" showButtons
+                                    :disabled="!loaded" inputId="probeConcurrency" />
+                                <label for="probeConcurrency" class="text-sm">Probes in flight per domain</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <InputNumber v-model="probeRatePerSecond" :min="0" :max="1000"
+                                    :minFractionDigits="0" :maxFractionDigits="2" showButtons
+                                    :disabled="!loaded" inputId="probeRatePerSecond" />
+                                <label for="probeRatePerSecond" class="text-sm">Requests per second per domain (0 = no cap)</label>
+                            </div>
+                            <p v-if="limitsError" class="text-sm text-red-500">{{ limitsError }}</p>
                         </div>
 
                         <div class="flex flex-col gap-3 flex-1">
