@@ -30,6 +30,25 @@ export class BaseTrackedParamStore {
     );
   }
 
+  protected remove(
+    endpoint: string,
+    candidate: TrackedParam,
+    valueSensitive: boolean
+  ): void {
+    const params = this.reqParams.get(endpoint);
+    if (!params) return;
+    const kept = params.filter(
+      (param) =>
+        !(param.key === candidate.key &&
+          param.source === candidate.source &&
+          param.method === candidate.method &&
+          param.code === candidate.code &&
+          (!valueSensitive || param.value === candidate.value))
+    );
+    if (kept.length > 0) this.reqParams.set(endpoint, kept);
+    else this.reqParams.delete(endpoint);
+  }
+
   protected add(
     endpoint: string,
     reqParam: TrackedParam,

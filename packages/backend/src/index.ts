@@ -2,24 +2,7 @@ import type { DefineAPI, SDK } from "caido:plugin";
 import type { Request, Response } from "caido:utils";
 import { run as reflectorRun } from "./reflector++.js";
 import { ConfigStore } from "./stores/configStore.js";
-
-
-interface AsyncOperation<T> {
-    (): Promise<T>;
-}
-
-interface WithTimeout {
-    <T>(asyncOperation: AsyncOperation<T>, timeoutMs: number): Promise<T>;
-}
-
-const withTimeout: WithTimeout = (asyncOperation, timeoutMs) => {
-    return Promise.race([
-        asyncOperation(),
-        new Promise<never>(
-            (_, reject) => setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs)
-        )
-    ]);
-};
+import { probeLimiter, type ThrottledHost } from "./net/probeLimiter.js";
 
 export type API = DefineAPI<{
     setEnabled: (sdk: SDK, value: boolean) => Promise<void>;
@@ -29,6 +12,10 @@ export type API = DefineAPI<{
     setLogUnconfirmedFindings: (sdk: SDK, value: boolean) => Promise<void>;
     setNoSniffContentTypes: (sdk: SDK, value: string) => Promise<void>;
     setPathBlocklist: (sdk: SDK, value: string) => Promise<void>;
+    setProbeConcurrency: (sdk: SDK, value: number) => Promise<void>;
+    setProbeRatePerSecond: (sdk: SDK, value: number) => Promise<void>;
+    getThrottledHosts: (sdk: SDK) => Promise<ThrottledHost[]>;
+    resetThrottledHost: (sdk: SDK, host: string) => Promise<boolean>;
 }>;
 
 export function init(sdk: SDK<API>) {
@@ -55,10 +42,22 @@ export function init(sdk: SDK<API>) {
         const parsed = JSON.parse(value);
         ConfigStore.setPathBlocklist(parsed);
     })
+    sdk.api.register("setProbeConcurrency", async (_sdk, value: number) => {
+        ConfigStore.setProbeConcurrency(value)
+    })
+    sdk.api.register("setProbeRatePerSecond", async (_sdk, value: number) => {
+        ConfigStore.setProbeRatePerSecond(value)
+    })
+    sdk.api.register("getThrottledHosts", async () => probeLimiter.throttledHosts())
+    sdk.api.register("resetThrottledHost", async (_sdk, host: string) => probeLimiter.resetHost(host))
     sdk.events.onInterceptResponse(async (sdk, request: Request, response: Response) => {
         if (!ConfigStore.getEnabled()) return;
         if (ConfigStore.getProbeOutOfScopeRequests() || sdk.requests.inScope(request)) {
-            withTimeout(() => reflectorRun({ request, response }, sdk), 40_000);
+            // Awaited: Caido stops running this plugin's queued promise jobs once the handler
+            // settles, so an unawaited scan stalls at its next await until another event arrives.
+            await reflectorRun({ request, response }, sdk).catch((e) => {
+                sdk.console.error(`[Reflector++] Scan failed for ${request.getUrl()}: ${e}`);
+            });
         }
     });
 }

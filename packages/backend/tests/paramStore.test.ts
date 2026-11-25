@@ -61,6 +61,23 @@ describe('reqParamsStore', () => {
     expect(store.paramTested(ep, makeParam({ key: 'other', value: 'x' }))).toBe(false);
   });
 
+  test('release: forgets the released values and confirmations only', () => {
+    const store = reqParamsStore.get();
+    const ep = 'http://ex/release';
+    const a = makeParam({ key: 'a', value: '1' });
+    const b = makeParam({ key: 'b', value: '2' });
+    store.addParam(ep, a);
+    store.addParam(ep, b);
+    store.markConfirmed(ep, a);
+    store.release(ep, [a]);
+    expect(store.paramTested(ep, a)).toBe(false);
+    expect(store.paramTested(ep, makeParam({ key: 'a', value: 'other' }))).toBe(false);
+    expect(store.paramTested(ep, b)).toBe(true);
+    store.release(ep, [b]);
+    expect((store as any).reqParams.has(ep)).toBe(false);
+    expect(() => store.release('http://ex/unknown', [a])).not.toThrow();
+  });
+
   test('different code tracked separately', () => {
     const store = reqParamsStore.get();
     const ep = 'http://ex/code';
