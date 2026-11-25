@@ -1,3 +1,4 @@
+import { headerParamsStore } from "../src/stores/paramStore.js";
 import { checkHeaderReflections, confirmHeaderReflection } from "../src/analysis/headerReflection.js";
 import { ResponseHeaderPayloadGenerator } from "../src/payload/responseHeaderPayloadGenerator.ts";
 
@@ -73,6 +74,7 @@ function expectHeaderFinding(f: any, name: string, headerNames: string[]) {
 }
 
 describe("checkHeaderReflections", () => {
+  beforeEach(() => { (headerParamsStore as any)._store = undefined; });
   test("query parameter confirmed in single header", async () => {
     const req = makeRequest({ query: "q=val123" });
     const response = makeResponse({ "X-Ref": "prefix val123 suffix" });
