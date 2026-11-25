@@ -826,4 +826,54 @@ describe("runCountProbe()", () => {
     expect(result).toBeDefined();
     expect(result!.matches).toHaveLength(1);
   });
+  describe("event-handler nested-string gate", () => {
+    const needle = (ch: string) => "R".repeat(12) + encodeURIComponent(ch) + "R".repeat(5);
+    const bodyFor = (chars: string[]) => chars.map(needle).join("");
+    const detectSurviving = (survive: Set<string>) =>
+      (pre: string, ch: string, suf: string, body: string) =>
+        survive.has(ch) && body.includes(pre + encodeURIComponent(ch) + suf)
+          ? [{ context: "eventHandlerAttrInQuote", char: ch }] : [];
+
+    test("trapped chars with no quote breakout -> unconfirmed", async () => {
+      // onclick="f('VAL')" with the single quote stripped (WAF): ; ( ) \\ reflect inside
+      // the string but ' does not, so nothing breaks out.
+      const survive = new Set([";", "(", ")", "\\"]);
+      mockDetectImpl.mockImplementation(detectSurviving(survive));
+      const sdk = buildSdk(async () => ({ response: buildResponse(bodyFor([...survive])) }));
+      const result = await runProbes(
+        sdk, buildRequestWrapper(), { key: "hide", source: "URL", value: "orig" },
+        { context: ["eventHandlerAttrInQuote", "eventHandlerNestedString:'"], payload: [";", "(", ")", "'", "\\"] },
+        "Event Handler Attribute (quoted)"
+      );
+      expect(result.reflected).toBe(true);
+      expect(result.confirmed).toBe(false);
+      expect([...result.successfulChars].some((c) => c !== "")).toBe(false);
+    });
+
+    test("enclosing-quote breakout survives -> confirmed", async () => {
+      const survive = new Set([";", "(", ")", "'"]);
+      mockDetectImpl.mockImplementation(detectSurviving(survive));
+      const sdk = buildSdk(async () => ({ response: buildResponse(bodyFor([...survive])) }));
+      const result = await runProbes(
+        sdk, buildRequestWrapper(), { key: "hide", source: "URL", value: "orig" },
+        { context: ["eventHandlerAttrInQuote", "eventHandlerNestedString:'"], payload: [";", "(", ")", "'"] },
+        "Event Handler Attribute (quoted)"
+      );
+      expect(result.confirmed).toBe(true);
+      expect(result.successfulChars.has("'")).toBe(true);
+    });
+
+    test("code position (no nested-string flag) stays confirmed on code chars", async () => {
+      const survive = new Set([";", "(", ")"]);
+      mockDetectImpl.mockImplementation(detectSurviving(survive));
+      const sdk = buildSdk(async () => ({ response: buildResponse(bodyFor([...survive])) }));
+      const result = await runProbes(
+        sdk, buildRequestWrapper(), { key: "p", source: "URL", value: "orig" },
+        { context: ["eventHandlerAttrInQuote"], payload: [";", "(", ")"] },
+        "Event Handler Attribute (quoted)"
+      );
+      expect(result.confirmed).toBe(true);
+      expect(result.successfulChars.has(";")).toBe(true);
+    });
+  });
 });
