@@ -2,28 +2,33 @@ import type { LogSdk } from "../core/types.js";
 
 const JsonResponseBodyPayloadGenerator = class {
     body: string;
+    private _inStringTable?: Uint8Array;
 
     constructor(body: string) {
         this.body = body;
     }
 
-    private _isEscaped(pos: number): boolean {
-        let count = 0;
-        for (let i = pos - 1; i >= 0 && this.body[i] === "\\"; i -= 1) {
-            count += 1;
+    // For every body position, whether it is inside a JSON string: each '"' not preceded by
+    // an odd run of backslashes toggles the state. Computed once per body.
+    private _inStringStates(): Uint8Array {
+        if (this._inStringTable) return this._inStringTable;
+        const body = this.body;
+        const table = new Uint8Array(body.length + 1);
+        let inString = 0;
+        let backslashes = 0;
+        for (let i = 0; i < body.length; i += 1) {
+            table[i] = inString;
+            const ch = body[i];
+            if (ch === "\"" && backslashes % 2 === 0) inString ^= 1;
+            backslashes = ch === "\\" ? backslashes + 1 : 0;
         }
-        return count % 2 === 1;
+        table[body.length] = inString;
+        this._inStringTable = table;
+        return table;
     }
 
     private _isInsideJsonString(index: number): boolean {
-        let inString = false;
-        for (let i = 0; i < index && i < this.body.length; i += 1) {
-            const ch = this.body[i];
-            if (ch === "\"" && !this._isEscaped(i)) {
-                inString = !inString;
-            }
-        }
-        return inString;
+        return this._inStringStates()[Math.max(0, Math.min(index, this.body.length))] === 1;
     }
 
     private _safeDecode(value: string): string {
