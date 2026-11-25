@@ -13,6 +13,7 @@ import { getTags } from "./context.js";
 import { modifyAmbiguousParameters } from "./probes.js";
 import { errorParamsStore } from "../../stores/errorStore.js";
 import { reqParamsStore } from "../../stores/paramStore.js";
+import { UNCONFIRMED_VALUE_CAP } from "../../core/constants.js";
 import { runProbes, runCountProbe } from "./probeRunner.js";
 import { resolveBestContext } from "./contextResolution.js";
 import { detectEncodedOnly } from "./encodedSignalDetection.js";
@@ -110,19 +111,24 @@ async function checkParameter(scan: BodyScan, param: any): Promise<ReflectedPara
   sdk.console.log(`[Reflector++] Found ${baselineMatches.length} baseline reflection(s) for "${param.key}"`);
   const contextInfo = scan.payloadGenerator.generate(sdk as any, param.value);
   const bestContext = resolveBestContext(baselineMatches, bodyText, scan.tags, contextInfo);
+  const reflectedIn: string[] = contextInfo?.context?.length > 0 ? contextInfo.context : [bestContext];
+  // Reflected without confirming for several values in these same contexts already:
+  // a rotating value (token, nonce) that is safely encoded. Not worth re-probing.
+  if (reqParamsStore.get().capped(endpoint, param, reflectedIn)) return undefined;
 
-  const { confirmed, reflected, successfulChars: probeChars, bestContext: resolvedCtx, firstBatchCount } = await runProbes(sdk, request, param, contextInfo, bestContext);
+  const { confirmed, reflected, successfulChars: probeChars, bestContext: resolvedCtx, firstBatchCount, batchFailed } = await runProbes(sdk, request, param, contextInfo, bestContext);
+  const unconfirmed = (): undefined => noteUnconfirmed(scan, param, reflectedIn, batchFailed);
 
   let pathCountResult: Awaited<ReturnType<typeof runCountProbe>>;
   if (param.source === 'Path' && (confirmed || reflected)) {
     pathCountResult = await runCountProbe(sdk, request, param);
     if (pathCountResult && pathCountResult.matches.length === 0) {
       sdk.console.log(`[Reflector++] Path segment "${param.key}" — count probe found 0 reflections, suppressing false positive (baseline had ${baselineMatches.length} natural word matches)`);
-      return undefined;
+      return unconfirmed();
     }
     if (pathCountResult && pathCountResult.code !== baselineCode) {
       sdk.console.log(`[Reflector++] Path segment "${param.key}" — count probe returned ${pathCountResult.code} (baseline ${baselineCode}), suppressing error-page reflection`);
-      return undefined;
+      return unconfirmed();
     }
   }
 
@@ -158,9 +164,24 @@ async function checkParameter(scan: BodyScan, param: any): Promise<ReflectedPara
     reqParamsStore.get().markConfirmed(endpoint, param as any);
     return { name: param.key, matches: finalMatches, context: resolvedCtx, aggressive: allowedChars.length ? allowedChars : undefined, source: param.source, value: finalValue, confirmed: true, severity: grade.severity, otherContexts };
   }
+  unconfirmed();
   if (scan.logUnconfirmed && reflected) {
     sdk.console.log(`[Reflector++] Logging unconfirmed reflection for "${param.key}" (probe markers reflected, no dangerous chars confirmed)`);
     return { name: param.key, matches: baselineMatches, context: resolvedCtx, aggressive: undefined, source: param.source, value: param.value, confirmed: false, severity: 'info' };
+  }
+  return undefined;
+}
+
+// Counts a value whose probes completed without a confirmed reflection towards the
+// param's cap. Incomplete results (a failed batch, an aborted scan) do not count.
+function noteUnconfirmed(
+  scan: BodyScan, param: any, reflectedIn: string[], batchFailed: boolean
+): undefined {
+  if (batchFailed || scan.sdk.scan?.abortReason) return undefined;
+  if (reqParamsStore.get().recordUnconfirmed(scan.endpoint, param, reflectedIn)) {
+    scan.sdk.console.log(`[Reflector++] "${param.key}" on ${scan.endpoint} capped after `
+      + `${UNCONFIRMED_VALUE_CAP} unconfirmed values in {${reflectedIn.join(', ')}}; `
+      + `not probing new values there until reload`);
   }
   return undefined;
 }

@@ -23,6 +23,9 @@ export interface ProbeResult {
     // Reflection count of the first batch's leading marker, so a confirmed param does
     // not need a separate count probe. Absent when the first batch got no response.
     firstBatchCount?: CountProbeResult;
+    // A batch got no usable response (send error, timeout, abort), so the result is
+    // incomplete and must not count as a clean "tested, not confirmed".
+    batchFailed: boolean;
 }
 
 // Long enough that the count marker cannot collide with existing page text.
@@ -213,8 +216,9 @@ export async function runProbes(
     const htmlFamilyChars = new Map<string, Set<string>>();
     let confirmed = false; let reflected = false; let bestContext = initialBestContext;
     let firstBatchCount: CountProbeResult | undefined;
+    let batchFailed = false;
     if (!contextInfo || !Array.isArray(contextInfo.payload) || contextInfo.payload.length === 0) {
-        return { confirmed: false, reflected: false, successfulChars, bestContext };
+        return { confirmed: false, reflected: false, successfulChars, bestContext, batchFailed: false };
     }
     const orderedPayload = orderPayloadBreakoutFirst(contextInfo.payload);
     // All batches are sent at once (the probe limiter caps how many are in flight), then
@@ -278,7 +282,10 @@ export async function runProbes(
                     }
                 }
             }
-        } catch (e) { (sdk as any).console.log(`[Reflector++] Probe error for ${param.key}: ${e}`); }
+        } catch (e) {
+            batchFailed = true;
+            (sdk as any).console.log(`[Reflector++] Probe error for ${param.key}: ${e}`);
+        }
     }
     // A "\" only matters in a quoted JS string if it defeats the quote escaping. Test
     // that directly; when the markers reflect but stay sealed, the "\" seen by the
@@ -336,7 +343,7 @@ export async function runProbes(
             for (const c of best.chars) successfulChars.add(c);
         }
     }
-    return { confirmed, reflected, successfulChars, bestContext, firstBatchCount };
+    return { confirmed, reflected, successfulChars, bestContext, firstBatchCount, batchFailed };
 }
 
 function countMarker(probe: any, marker: string, sdk: SDK): CountProbeResult {

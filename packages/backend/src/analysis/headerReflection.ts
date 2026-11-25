@@ -4,6 +4,9 @@ import { enumerateRequestParameters } from "../utils/params.js";
 import { sendProbe } from "./bodyReflection/probes.js";
 import { ResponseHeaderPayloadGenerator } from "../payload/responseHeaderPayloadGenerator.ts";
 import { detectRedirectPosition } from "./redirectAnalysis.js";
+import { buildEndpoint } from "../utils/http.js";
+import { headerParamsStore } from "../stores/paramStore.js";
+import { UNCONFIRMED_VALUE_CAP } from "../core/constants.js";
 
 type ReflectedParameter = AnalyzedReflectedParameter;
 
@@ -43,7 +46,7 @@ export async function confirmHeaderReflection(
   param: RequestParameter,
   headerNames: string[],
   sdk: any
-): Promise<{ confirmed: string[]; allowedChars: string[]; crlf: boolean; canary: string; probeHeaders: Record<string, string | string[]>; }> {
+): Promise<{ confirmed: string[]; allowedChars: string[]; crlf: boolean; canary: string; probeHeaders: Record<string, string | string[]>; failed: boolean; }> {
   const CANARY = `_HDR_CANARY_${Math.random().toString(36).slice(2, 10)}`;
   try {
     const requestSpec = originalRequest.toSpec();
@@ -65,6 +68,7 @@ export async function confirmHeaderReflection(
     let allowedChars: string[] = [];
     let crlf = false;
     let probeHeaders: Record<string, string | string[]> = {};
+    let failed = false;
     try {
       const newHeaders: Record<string, string | string[]> = (result.response as any).getHeaders ? (result.response as any).getHeaders() : {};
       probeHeaders = newHeaders;
@@ -80,12 +84,32 @@ export async function confirmHeaderReflection(
         crlf = detection.crlfInjection;
       }
     } catch (e) {
+      failed = true;
       sdk.console.log(`[Reflector++] Error reading headers for confirmation: ${e}`);
     }
-    return { confirmed, allowedChars, crlf, canary: CANARY, probeHeaders };
+    return { confirmed, allowedChars, crlf, canary: CANARY, probeHeaders, failed };
   } catch (e) {
     sdk.console.log(`[Reflector++] Error confirming header reflection: ${e}`);
-    return { confirmed: [], allowedChars: [], crlf: false, canary: CANARY, probeHeaders: {} };
+    return { confirmed: [], allowedChars: [], crlf: false, canary: CANARY, probeHeaders: {}, failed: true };
+  }
+}
+
+type HeaderTracking = { sdk: any; endpoint: string; probed: RequestParameter[] };
+
+// Marks a completed header probe: the value is tested, and the param is either confirmed
+// (deduped by name) or counted towards its unconfirmed-value cap for these headers.
+function recordHeaderOutcome(
+  track: HeaderTracking, param: RequestParameter, headerContexts: string[], isConfirmed: boolean
+): void {
+  const tested = headerParamsStore.get();
+  track.probed.push(param);
+  tested.addParam(track.endpoint, param);
+  if (isConfirmed) {
+    tested.markConfirmed(track.endpoint, param);
+  } else if (tested.recordUnconfirmed(track.endpoint, param, headerContexts)) {
+    track.sdk.console.log(`[Reflector++] "${param.key}" on ${track.endpoint} capped after `
+      + `${UNCONFIRMED_VALUE_CAP} unconfirmed values in headers {${headerContexts.join(', ')}}; `
+      + `not probing new values there until reload`);
   }
 }
 
@@ -93,6 +117,10 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
   const params = enumerateRequestParameters(request, sdk, response.getCode?.() ?? (response.getCode ? response.getCode() : 0), false);
   const confirmed: ReflectedParameter[] = [];
   if (params.length === 0) return confirmed;
+  // Params probed here are deduped across requests; if this scan is later dropped they
+  // are released so the next request retests them.
+  const track: HeaderTracking = { sdk, endpoint: buildEndpoint(request), probed: [] };
+  sdk.scan?.onAbort.push(() => headerParamsStore.get().release(track.endpoint, track.probed));
 
   const hdrsRaw: Record<string, string | string[]> = (response as any).getHeaders ? (response as any).getHeaders() : {};
   const hdrs = new Map<string, string[]>();
@@ -112,7 +140,12 @@ export async function checkHeaderReflections(request: any, response: any, sdk: a
       if (joined.includes(needle)) potential.push(name);
     }
     if (potential.length === 0) continue;
-    const { confirmed: confirmedHeaders, allowedChars, crlf, canary, probeHeaders } = await confirmHeaderReflection(request, param, potential, sdk);
+    const headerContexts = potential.map((h) => h.toLowerCase());
+    const tested = headerParamsStore.get();
+    if (tested.paramTested(track.endpoint, param) || tested.capped(track.endpoint, param, headerContexts)) continue;
+    const { confirmed: confirmedHeaders, allowedChars, crlf, canary, probeHeaders, failed } = await confirmHeaderReflection(request, param, potential, sdk);
+    if (failed || sdk.scan?.abortReason) continue;
+    recordHeaderOutcome(track, param, headerContexts, confirmedHeaders.length > 0);
     if (confirmedHeaders.length > 0) {
       const syntheticMatches: Array<[number, number]> = confirmedHeaders.map((_, i) => [i, i]);
       const contextLabel = crlf ? "Response Splitting (CRLF)" : "Response Header";

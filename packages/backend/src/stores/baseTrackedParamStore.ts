@@ -1,8 +1,8 @@
 import { TrackedParam } from './trackedParam.js';
 
 // A small reusable singleton-style store builder to track TrackedParam arrays per endpoint.
-// Each logical store (request tested vs error encountered) just supplies the semantic
-// predicate name (tested/errored) via wrapping methods.
+// Each logical store supplies its semantic predicate name (e.g. errored) via wrapping
+// methods.
 export class BaseTrackedParamStore {
   protected reqParams: Map<string, TrackedParam[]> = new Map();
 
@@ -10,9 +10,8 @@ export class BaseTrackedParamStore {
 
   // valueSensitive: when true, the value is part of the identity, so a new
   // value for the same (key, source, method, code) is a distinct entry. The
-  // request store uses this so a param that did not reflect on one value is
-  // still tested on the next; the error store uses false so a param that
-  // already errored is not retried on every new value.
+  // error store uses false so a param that already errored is not retried on
+  // every new value.
   protected has(
     endpoint: string,
     candidate: TrackedParam,
@@ -28,25 +27,6 @@ export class BaseTrackedParamStore {
         param.code === candidate.code &&
         (!valueSensitive || param.value === candidate.value)
     );
-  }
-
-  protected remove(
-    endpoint: string,
-    candidate: TrackedParam,
-    valueSensitive: boolean
-  ): void {
-    const params = this.reqParams.get(endpoint);
-    if (!params) return;
-    const kept = params.filter(
-      (param) =>
-        !(param.key === candidate.key &&
-          param.source === candidate.source &&
-          param.method === candidate.method &&
-          param.code === candidate.code &&
-          (!valueSensitive || param.value === candidate.value))
-    );
-    if (kept.length > 0) this.reqParams.set(endpoint, kept);
-    else this.reqParams.delete(endpoint);
   }
 
   protected add(

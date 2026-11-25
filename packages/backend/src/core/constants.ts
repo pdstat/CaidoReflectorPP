@@ -57,3 +57,9 @@ export const COMMON_ANALYTICS_HOSTS_SET = new Set(COMMON_ANALYTICS_HOSTS);
 
 export const COMMON_ANALYTICS_ENDPOINTS = ['/socket.io/'];
 export const COMMON_ANALYTICS_ENDPOINTS_SET = new Set(COMMON_ANALYTICS_ENDPOINTS);
+
+// A param reflecting without confirming for this many distinct values (in one set of
+// contexts) is not probed again for new values there: rotating tokens, nonces.
+export const UNCONFIRMED_VALUE_CAP = 3;
+// Most recent values remembered per param for value-level dedupe.
+export const TESTED_VALUE_WINDOW = 50;

@@ -123,7 +123,7 @@ describe("runProbes()", () => {
       { context: ["html"], payload: [] },
       "html"
     );
-    expect(result).toEqual({ confirmed: false, reflected: false, successfulChars: new Set(), bestContext: "html" });
+    expect(result).toEqual({ confirmed: false, reflected: false, successfulChars: new Set(), bestContext: "html", batchFailed: false });
     expect(sdk.requests.send).not.toHaveBeenCalled();
   });
 

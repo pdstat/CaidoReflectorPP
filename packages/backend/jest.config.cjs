@@ -16,6 +16,7 @@ module.exports = {
   '^../scoring\\.js$': '<rootDir>/src/analysis/scoring.ts',
   '^\.\/scoring\.js$': '<rootDir>/src/analysis/scoring.ts',
   '^\.\/http\.js$': '<rootDir>/src/utils/http.ts',
+  '^../utils/http\\.js$': '<rootDir>/src/utils/http.ts',
     '^../../utils/params\\.js$': '<rootDir>/src/utils/params.ts',
     '^../utils/params\\.js$': '<rootDir>/src/utils/params.ts',
   '^../stores/paramStore\.js$': '<rootDir>/src/stores/paramStore.ts',
