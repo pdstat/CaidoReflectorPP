@@ -8,41 +8,63 @@ import type { LogSdk } from "../core/types.js";
 // contract so probeRunner can swap it in by content-type.
 const JsResponseBodyPayloadGenerator = class {
     body: string;
+    private _lexTable?: Uint8Array;
 
     constructor(body: string) {
         this.body = body;
     }
 
-    private _isEscaped(pos: number): boolean {
-        let count = 0;
-        for (let i = pos - 1; i >= 0 && this.body[i] === "\\"; i -= 1) {
-            count += 1;
-        }
-        return count % 2 === 1;
-    }
+    // Lexer states, indexed by the codes stored in the table.
+    private static readonly _STATES = ["", '"', "'", "`", "//", "/*"];
 
-    // Lexical state at `index`: the enclosing quote char, "comment" inside a // or /* */
-    // comment, or "" when the position is in code. Regex literals are not tracked; an
-    // escaped "/" (as in /a\/\//) is never taken as a comment start.
-    private _lexStateAt(index: number): string {
+    // Lexical state before every body position, computed in one pass: the enclosing quote
+    // char, a // or /* */ comment, or code (""). A quote or comment start is escaped when an
+    // odd run of backslashes precedes it. Regex literals are not tracked; an escaped "/"
+    // (as in /a\/\//) is never taken as a comment start.
+    private _lexStates(): Uint8Array {
+        if (this._lexTable) return this._lexTable;
         const body = this.body;
-        let state = "";
-        for (let i = 0; i < index && i < body.length; i += 1) {
+        const n = body.length;
+        const table = new Uint8Array(n + 1);
+        let state = 0;
+        let backslashes = 0; // length of the run of "\" ending just before body[i]
+        let i = 0;
+        while (i < n) {
+            table[i] = state;
             const ch = body[i];
-            if (state === "//") {
-                if (ch === "\n" || ch === "\r" || ch === "\u2028" || ch === "\u2029") state = "";
-            } else if (state === "/*") {
-                if (ch === "*" && body[i + 1] === "/") { state = ""; i += 1; }
-            } else if (state !== "") {
-                if (ch === state && !this._isEscaped(i)) state = "";
+            const next = body[i + 1];
+            const escaped = backslashes % 2 === 1;
+            let pair = false; // the transition consumed body[i] and body[i + 1]
+            if (state === 4) {
+                if (ch === "\n" || ch === "\r" || ch === "\u2028" || ch === "\u2029") state = 0;
+            } else if (state === 5) {
+                if (ch === "*" && next === "/") { state = 0; pair = true; }
+            } else if (state !== 0) {
+                if (ch === JsResponseBodyPayloadGenerator._STATES[state] && !escaped) state = 0;
             } else if (ch === '"' || ch === "'" || ch === "`") {
-                if (!this._isEscaped(i)) state = ch;
-            } else if (ch === "/" && (body[i + 1] === "/" || body[i + 1] === "*") && !this._isEscaped(i)) {
-                state = body[i + 1] === "/" ? "//" : "/*";
+                if (!escaped) state = JsResponseBodyPayloadGenerator._STATES.indexOf(ch);
+            } else if (ch === "/" && (next === "/" || next === "*") && !escaped) {
+                state = next === "/" ? 4 : 5;
+                pair = true;
+            }
+            if (pair) {
+                table[i + 1] = state;
+                backslashes = 0;
+                i += 2;
+            } else {
+                backslashes = ch === "\\" ? backslashes + 1 : 0;
                 i += 1;
             }
         }
-        return state === "//" || state === "/*" ? "comment" : state;
+        table[n] = state;
+        this._lexTable = table;
+        return table;
+    }
+
+    // Lexical state at `index`: the enclosing quote char, "comment", or "" in code.
+    private _lexStateAt(index: number): string {
+        const code = this._lexStates()[Math.max(0, Math.min(index, this.body.length))];
+        return code >= 4 ? "comment" : JsResponseBodyPayloadGenerator._STATES[code];
     }
 
     // Inside a comment the reflection is inert unless a line terminator / "*/" survives,
