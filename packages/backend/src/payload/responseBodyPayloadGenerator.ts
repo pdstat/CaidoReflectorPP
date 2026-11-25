@@ -1,6 +1,9 @@
 import type { LogSdk } from "../core/types.js";
 import { parse, HTMLElement, Node } from "node-html-parser";
 
+type RawAttrDetail = { value: string; quote: '"' | "'" | "" };
+type Spans = { starts: number[]; ends: number[] };
+
 // Moved from src/payloadGenerator.ts (original location) for modularization.
 // NOTE: Keep default export name stable for existing imports via shim.
 const ResponseBodyPayloadGenerator = class {
@@ -19,14 +22,182 @@ const ResponseBodyPayloadGenerator = class {
 		});
 	}
 
-	// ---------- Utilities ----------
-	private _walkNodes(node: Node, cb: (node: Node) => void): void {
-		cb(node);
-		const kids = (node as any).childNodes as any[] | undefined;
-		if (Array.isArray(kids)) {
-			for (const child of kids) this._walkNodes(child, cb);
-		}
+	// ---------- Per-instance caches ----------
+	// The parsed DOM and body are never modified after construction, so element lists,
+	// decoded attributes, lowercased sources and JS quote state are computed once and reused
+	// across the generate()/detect() calls made on one response.
+	private _nodeList?: any[];
+	private _textNodeList?: Array<{ raw: string | undefined; tag: string }>;
+	private _selectorCache = new Map<string, any[]>();
+	private _execScriptList?: any[];
+	private _attrCache = new WeakMap<object, Record<string, string>>();
+	private _rawAttrCache = new WeakMap<object, Map<string, RawAttrDetail | null>>();
+	private _rawAttrRegexes = new Map<string, RegExp>();
+	private _textCache = new WeakMap<object, unknown>();
+	private _innerLowerCache = new WeakMap<object, string>();
+	private _lowerCache = new Map<string, string>();
+	private _quoteOpenTables = new Map<string, Int32Array>();
+	private _bodyLowerCache?: string;
+	private _tagSpanCache?: Spans;
+	private _handlerSpanCache?: Spans;
+
+	// All nodes in document order (pre-order, the order a recursive walk visits them).
+	private _nodes(): any[] {
+		if (this._nodeList) return this._nodeList;
+		const out: any[] = [];
+		const walk = (node: any): void => {
+			out.push(node);
+			const kids = node.childNodes as any[] | undefined;
+			if (Array.isArray(kids)) {
+				for (const child of kids) walk(child);
+			}
+		};
+		walk(this.root);
+		this._nodeList = out;
+		return out;
 	}
+
+	// Text nodes with their raw (undecoded) text and parent tag, in document order.
+	private _textNodes(): Array<{ raw: string | undefined; tag: string }> {
+		if (this._textNodeList) return this._textNodeList;
+		const out: Array<{ raw: string | undefined; tag: string }> = [];
+		for (const n of this._nodes()) {
+			const isText = n.nodeType === 3 || n.constructor?.name === "TextNode";
+			if (!isText) continue;
+			const parent = n.parentNode as any | undefined;
+			const tag = parent?.rawTagName ? String(parent.rawTagName).toUpperCase() : "";
+			// rawText, not the entity-decoded text: "&lt;" in the source is not a literal "<".
+			out.push({ raw: n.rawText ?? n.text, tag });
+		}
+		this._textNodeList = out;
+		return out;
+	}
+
+	private _select(selector: string): any[] {
+		let els = this._selectorCache.get(selector);
+		if (!els) {
+			els = ((this.root as any).querySelectorAll?.(selector) ?? []) as any[];
+			this._selectorCache.set(selector, els);
+		}
+		return els;
+	}
+
+	private _execScripts(): any[] {
+		if (!this._execScriptList) {
+			this._execScriptList = this._select("script").filter((el) =>
+				this._isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())
+			);
+		}
+		return this._execScriptList;
+	}
+
+	// Decoded attributes (node-html-parser re-decodes them on every `attributes` access).
+	private _attrsOf(el: any): Record<string, string> {
+		let attrs = this._attrCache.get(el);
+		if (!attrs) {
+			attrs = el.attributes || {};
+			this._attrCache.set(el, attrs!);
+		}
+		return attrs!;
+	}
+
+	// Entity-decoded node text (node-html-parser decodes on every `text` access).
+	private _textOf(node: any): unknown {
+		if (!this._textCache.has(node)) this._textCache.set(node, node.text);
+		return this._textCache.get(node);
+	}
+
+	private _lower(s: string): string {
+		let lc = this._lowerCache.get(s);
+		if (lc === undefined) {
+			lc = s.toLowerCase();
+			this._lowerCache.set(s, lc);
+		}
+		return lc;
+	}
+
+	private _bodyLower(): string {
+		if (this._bodyLowerCache === undefined) this._bodyLowerCache = this.body.toLowerCase();
+		return this._bodyLowerCache;
+	}
+
+	// For each position i in src: the index of the JS string quote open before src[i], or
+	// -1 in code position. Backslash escapes only inside a string; outside a string any of
+	// " ' ` opens one, and only the same char closes it.
+	private _quoteOpenTable(src: string): Int32Array {
+		let table = this._quoteOpenTables.get(src);
+		if (table) return table;
+		table = new Int32Array(src.length + 1);
+		let open = -1;
+		let escaped = false;
+		for (let i = 0; i < src.length; i++) {
+			table[i] = open;
+			const ch = src[i];
+			if (escaped) { escaped = false; continue; }
+			if (open !== -1) {
+				if (ch === "\\") { escaped = true; continue; }
+				if (ch === src[open]) open = -1;
+			} else if (ch === '"' || ch === "'" || ch === "`") {
+				open = i;
+			}
+		}
+		table[src.length] = open;
+		this._quoteOpenTables.set(src, table);
+		return table;
+	}
+
+	// Start/end of every regex match region in the body, for "is this marker occurrence
+	// inside any region" queries. Regions are found left to right and their ends never
+	// decrease, so the last region starting at or before a position has the furthest end.
+	private static _spansContain(spans: Spans, body: string, marker: string): boolean {
+		if (spans.starts.length === 0) return false;
+		if (marker.length === 0) return true; // "" is inside every region
+		let pos = body.indexOf(marker);
+		while (pos !== -1) {
+			let lo = 0, hi = spans.starts.length - 1, last = -1;
+			while (lo <= hi) {
+				const mid = (lo + hi) >> 1;
+				if (spans.starts[mid] <= pos) { last = mid; lo = mid + 1; } else hi = mid - 1;
+			}
+			if (last !== -1 && pos + marker.length <= spans.ends[last]) return true;
+			pos = body.indexOf(marker, pos + 1);
+		}
+		return false;
+	}
+
+	// Each start tag "<name ..." up to its first ">" (inclusive).
+	private _tagSpans(): Spans {
+		if (this._tagSpanCache) return this._tagSpanCache;
+		const spans: Spans = { starts: [], ends: [] };
+		const tagRe = /<[a-z][a-z0-9]*\s/gi;
+		let tm;
+		while ((tm = tagRe.exec(this.body)) !== null) {
+			const tagEnd = this.body.indexOf('>', tm.index);
+			if (tagEnd === -1) continue;
+			spans.starts.push(tm.index);
+			spans.ends.push(tagEnd + 1);
+		}
+		this._tagSpanCache = spans;
+		return spans;
+	}
+
+	// Each on*= attribute value region: up to the tag's ">" (exclusive), else 500 chars.
+	private _handlerSpans(): Spans {
+		if (this._handlerSpanCache) return this._handlerSpanCache;
+		const spans: Spans = { starts: [], ends: [] };
+		const re = /\bon[a-z]+\s*=\s*/gi;
+		let m;
+		while ((m = re.exec(this.body)) !== null) {
+			const start = m.index + m[0].length;
+			const tagEnd = this.body.indexOf('>', start);
+			spans.starts.push(start);
+			spans.ends.push(start + (tagEnd === -1 ? 500 : tagEnd - start));
+		}
+		this._handlerSpanCache = spans;
+		return spans;
+	}
+
+	// ---------- Utilities ----------
 
 	// Script/style source is never element text: those contexts are detected separately,
 	// so their raw content must not count here even when the caller excludes nothing.
@@ -35,18 +206,9 @@ const ResponseBodyPayloadGenerator = class {
 	private _containsTextOutsideTags(marker: string, exclude: string[] = ["SCRIPT", "STYLE"]): boolean {
 		const skip = new Set([...exclude, ...ResponseBodyPayloadGenerator._NEVER_TEXT]);
 		let found = false;
-		this._walkNodes(this.root as any, (n: Node) => {
-			if (found) return;
-			const isText =
-				(n as any).nodeType === 3 || (n as any).constructor?.name === "TextNode";
-			if (isText) {
-				const parent = (n as any).parentNode as any | undefined;
-				const tag = parent?.rawTagName ? String(parent.rawTagName).toUpperCase() : "";
-				// rawText, not the entity-decoded text: "&lt;" in the source is not a literal "<".
-				const raw = (n as any).rawText ?? (n as any).text;
-				if (!skip.has(tag) && raw?.includes(marker)) found = true;
-			}
-		});
+		for (const { raw, tag } of this._textNodes()) {
+			if (!skip.has(tag) && raw?.includes(marker)) { found = true; break; }
+		}
 		if (!found && this.body.includes(marker)) {
 			found = !this._noTextOccurrence(marker, Array.from(skip));
 		}
@@ -58,7 +220,7 @@ const ResponseBodyPayloadGenerator = class {
 	// value, where a raw "<" cannot open a tag. Other chars (notably quotes) inside a value
 	// can still end it, so they keep counting.
 	private _noTextOccurrence(marker: string, exclude: string[]): boolean {
-		const bodyLC = this.body.toLowerCase();
+		const bodyLC = this._bodyLower();
 		const markerLC = marker.toLowerCase();
 		// Lowercasing can change length for some non-ASCII chars; only then are bodyLC
 		// offsets unusable as body offsets for the attribute-value check.
@@ -134,13 +296,31 @@ const ResponseBodyPayloadGenerator = class {
 		return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	}
 
-	private _getRawAttrDetail(el: HTMLElement, name: string): { value: string; quote: '"' | "'" | "" } | null {
+	private _getRawAttrDetail(el: HTMLElement, name: string): RawAttrDetail | null {
+		let byName = this._rawAttrCache.get(el);
+		if (!byName) {
+			byName = new Map();
+			this._rawAttrCache.set(el, byName);
+		}
+		let detail = byName.get(name);
+		if (detail === undefined) {
+			detail = this._parseRawAttrDetail(el, name);
+			byName.set(name, detail);
+		}
+		return detail;
+	}
+
+	private _parseRawAttrDetail(el: HTMLElement, name: string): RawAttrDetail | null {
 		const raw = (el as any).rawAttrs as string | undefined;
 		if (!raw) return null;
-		const re = new RegExp(
-			`(?:^|\\s)${ResponseBodyPayloadGenerator._escapeRegexLiteral(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
-			"i"
-		);
+		let re = this._rawAttrRegexes.get(name);
+		if (!re) {
+			re = new RegExp(
+				`(?:^|\\s)${ResponseBodyPayloadGenerator._escapeRegexLiteral(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+				"i"
+			);
+			this._rawAttrRegexes.set(name, re);
+		}
 		const m = raw.match(re);
 		if (!m) return null;
 		if (m[1] !== undefined) return { value: m[1], quote: '"' };
@@ -148,40 +328,22 @@ const ResponseBodyPayloadGenerator = class {
 		return { value: m[3], quote: "" };
 	}
 
+	// Quote chars enclosing the (non-overlapping) occurrences of value in text.
 	private _getQuoteInfo(text: string, value: string): string[] {
 		const res = new Set<string>();
+		const table = this._quoteOpenTable(text);
 		let startIndex = 0;
 		while (startIndex < text.length) {
 			const index = text.indexOf(value, startIndex);
 			if (index === -1) break;
-			let inDouble = false, inSingle = false, inTpl = false, escaping = false;
-			for (let i = 0; i < index; i++) {
-				const ch = text[i];
-				if (escaping) { escaping = false; continue; }
-				if (ch === "\\" && (inSingle || inDouble || inTpl)) { escaping = true; continue; }
-				const inStr = inSingle || inDouble || inTpl;
-				if (!inStr && ch === '"' && !inSingle && !inTpl) inDouble = true;
-				else if (inDouble && ch === '"') inDouble = false;
-				else if (!inStr && ch === "'" && !inDouble && !inTpl) inSingle = true;
-				else if (inSingle && ch === "'") inSingle = false;
-				else if (!inStr && ch === "`" && !inDouble && !inSingle) inTpl = true;
-				else if (inTpl && ch === "`") inTpl = false;
-			}
-			if (inDouble) res.add('"');
-			if (inSingle) res.add("'");
-			if (inTpl) res.add("`");
+			if (table[index] !== -1) res.add(text[table[index]]);
 			startIndex = index + value.length;
 		}
 		return Array.from(res);
 	}
 
 	isInScriptOutsideString(needle: string): boolean {
-		const scripts = (
-			(this.root as any).querySelectorAll?.("script") ?? []
-		) as any[];
-		for (const el of scripts) {
-			const type = (el.getAttribute?.("type") || "").toString();
-			if (!this._isJsExecutableScriptType(type)) continue;
+		for (const el of this._execScripts()) {
 			const src: string = typeof el.rawText === "string"
 				? el.rawText
 				: (typeof el.text === "string" ? el.text : "");
@@ -201,20 +363,8 @@ const ResponseBodyPayloadGenerator = class {
 	// Delimiter of the JS string enclosing src[idxStart] and the index of its opening quote
 	// (null / -1 in code position).
 	private _jsQuoteOpenAt(src: string, idxStart: number): { quote: '"' | "'" | "`" | null; open: number } {
-		let inQuote: '"' | "'" | "`" | null = null;
-		let open = -1;
-		let escaped = false;
-		for (let i = 0; i < idxStart && i < src.length; i++) {
-			const ch = src[i];
-			if (escaped) { escaped = false; continue; }
-			if (inQuote) {
-				if (ch === "\\") { escaped = true; continue; }
-				if (ch === inQuote) { inQuote = null; open = -1; continue; }
-			} else {
-				if (ch === '"' || ch === "'" || ch === "`") { inQuote = ch; open = i; continue; }
-			}
-		}
-		return { quote: inQuote, open };
+		const open = this._quoteOpenTable(src)[Math.max(0, Math.min(idxStart, src.length))];
+		return { quote: open === -1 ? null : (src[open] as '"' | "'" | "`"), open };
 	}
 
 	// True when a probed quote char lands, in every executable-script occurrence, inside a
@@ -224,10 +374,8 @@ const ResponseBodyPayloadGenerator = class {
 	// markers are really in the reflection's original context.
 	public isQuoteInertInScript(batchStartPrefix: string, prefix: string, quote: string, suffix: string): boolean {
 		const marker = prefix + quote + suffix;
-		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
 		let sawInert = false;
-		for (const el of scripts) {
-			if (!this._isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())) continue;
+		for (const el of this._execScripts()) {
 			const src: string = typeof el.rawText === "string" ? el.rawText : "";
 			let pos = src.indexOf(marker);
 			while (pos !== -1) {
@@ -246,12 +394,9 @@ const ResponseBodyPayloadGenerator = class {
 		let nodes: any[] = [];
 		const lower = tagName.toLowerCase();
 		if (lower === "script") {
-			const all = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
-			nodes = all.filter((el) =>
-				this._isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())
-			);
+			nodes = this._execScripts();
 		} else {
-			nodes = ((this.root as any).querySelectorAll?.(tagName) ?? []) as any[];
+			nodes = this._select(tagName);
 		}
 		const variants = new Set<string>();
 		const expandBackslashes = (s: string, depth: number) => {
@@ -281,7 +426,7 @@ const ResponseBodyPayloadGenerator = class {
 					? (el as any).text
 					: "";
 			if (!src) continue;
-			const srcLC = src.toLowerCase();
+			const srcLC = this._lower(src);
 			if (inquote) {
 				for (const cand of variants) {
 					const candLC = cand.toLowerCase();
@@ -298,8 +443,7 @@ const ResponseBodyPayloadGenerator = class {
 					if (srcLC.includes(cand.toLowerCase())) return true;
 				}
 				if (lower === "template") {
-					const inner = typeof (el as any).innerHTML === "string"
-						? (el as any).innerHTML.toLowerCase() : "";
+					const inner = this._innerLower(el);
 					if (inner) {
 						for (const cand of variants) {
 							if (inner.includes(cand.toLowerCase())) return true;
@@ -309,6 +453,15 @@ const ResponseBodyPayloadGenerator = class {
 			}
 		}
 		return false;
+	}
+
+	private _innerLower(el: any): string {
+		let inner = this._innerLowerCache.get(el);
+		if (inner === undefined) {
+			inner = typeof el.innerHTML === "string" ? el.innerHTML.toLowerCase() : "";
+			this._innerLowerCache.set(el, inner!);
+		}
+		return inner!;
 	}
 
 	public detect(
@@ -346,11 +499,11 @@ const ResponseBodyPayloadGenerator = class {
 		const quoteAttrContexts = ["attributeInQuote", "urlAttrInQuote", "srcsetUrlInQuote", "metaRefresh"];
 		if (!(quoteAttrContexts.some((c) => ctx.context.includes(c)) && (payload === '"' || payload === "'"))) return;
 		sdk.console.log(`\[Reflector++] checking [${payload}] is reflected in quoted attribute`);
-		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
+		const allEls = this._select("*") as HTMLElement[];
 		let found = false;
 		for (let i = 0; i < allEls.length && !found; i++) {
 			const el = allEls[i];
-			const attrs: Record<string, string> = (el as any).attributes || el.attributes;
+			const attrs: Record<string, string> = this._attrsOf(el);
 			for (const name in attrs) {
 				const raw = this._getRawAttrDetail(el, name);
 				if (!raw) continue;
@@ -413,10 +566,7 @@ const ResponseBodyPayloadGenerator = class {
 			escapedCandidates.add(base.replace(/\\/g, "\\\\\\"));
 		}
 		for (const lit of literalCandidates) escapedCandidates.delete(lit);
-		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
-		const execScripts = scripts.filter((el) =>
-			this._isJsExecutableScriptType((el.getAttribute?.("type") || "").toString())
-		);
+		const execScripts = this._execScripts();
 		let literalMatch = false;
 		let escapedMatch = false;
 		const searchCandidates = (
@@ -446,7 +596,7 @@ const ResponseBodyPayloadGenerator = class {
 		}
 		if (!literalMatch && !escapedMatch) {
 			for (const { src } of scriptSrcs) {
-				const srcLC = src.toLowerCase();
+				const srcLC = this._lower(src);
 				for (const cand of literalCandidates) {
 					if (srcLC.includes(cand.toLowerCase())) {
 						literalMatch = true;
@@ -516,9 +666,8 @@ const ResponseBodyPayloadGenerator = class {
 				aqFound = true;
 			}
 			if (!aqFound) {
-				const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
-				for (const el of allEls) {
-					const attrs: Record<string, string> = (el as any).attributes || el.attributes;
+				for (const el of this._select("*")) {
+					const attrs: Record<string, string> = this._attrsOf(el);
 					for (const name in attrs) {
 						const decoded = attrs[name];
 						if (typeof decoded === "string" && decoded.includes(marker)) {
@@ -540,9 +689,8 @@ const ResponseBodyPayloadGenerator = class {
 				ehFound = true;
 			}
 			if (!ehFound) {
-				const nodes: any[] = (this.root as any).querySelectorAll("*") as HTMLElement[];
-				for (const el of nodes) {
-					const attrs: Record<string, string> = (el as any).attributes || el.attributes;
+				for (const el of this._select("*")) {
+					const attrs: Record<string, string> = this._attrsOf(el);
 					for (const name in attrs) {
 						if (!/^on/i.test(name)) continue;
 						const decoded = attrs[name];
@@ -1057,9 +1205,8 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _markerInEventHandler(marker: string, quoted: boolean): boolean {
-		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
-		for (const el of allEls) {
-			const attrs: Record<string, string> = (el as any).attributes || {};
+		for (const el of this._select("*") as HTMLElement[]) {
+			const attrs: Record<string, string> = this._attrsOf(el);
 			for (const name in attrs) {
 				if (!/^on/i.test(name)) continue;
 				const raw = this._getRawAttrDetail(el, name);
@@ -1068,24 +1215,12 @@ const ResponseBodyPayloadGenerator = class {
 				if (!quoted && raw.quote === "" && raw.value.includes(marker)) return true;
 			}
 		}
-		if (this.body.includes(marker)) {
-			const re = /\bon[a-z]+\s*=\s*/gi;
-			let m;
-			while ((m = re.exec(this.body)) !== null) {
-				const start = m.index + m[0].length;
-				const tagEnd = this.body.indexOf('>', start);
-				const window = tagEnd === -1 ? 500 : tagEnd - start;
-				const region = this.body.substring(start, start + window);
-				if (region.includes(marker)) return true;
-			}
-		}
-		return false;
+		return ResponseBodyPayloadGenerator._spansContain(this._handlerSpans(), this.body, marker);
 	}
 
 	private _markerInUrlAttr(marker: string): boolean {
-		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
-		for (const el of allEls) {
-			const attrs: Record<string, string> = (el as any).attributes || {};
+		for (const el of this._select("*") as HTMLElement[]) {
+			const attrs: Record<string, string> = this._attrsOf(el);
 			for (const name in attrs) {
 				if (!this._urlAttrs.has(name.toLowerCase())) continue;
 				const raw = this._getRawAttrDetail(el, name);
@@ -1096,9 +1231,8 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _markerInStyleAttr(marker: string): boolean {
-		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
-		for (const el of allEls) {
-			const attrs: Record<string, string> = (el as any).attributes || {};
+		for (const el of this._select("*") as HTMLElement[]) {
+			const attrs: Record<string, string> = this._attrsOf(el);
 			if (!("style" in attrs)) continue;
 			const raw = this._getRawAttrDetail(el, "style");
 			if (raw && raw.value.includes(marker)) return true;
@@ -1107,9 +1241,8 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _markerInAnyAttr(marker: string): boolean {
-		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
-		for (const el of allEls) {
-			const attrs: Record<string, string> = (el as any).attributes || {};
+		for (const el of this._select("*") as HTMLElement[]) {
+			const attrs: Record<string, string> = this._attrsOf(el);
 			for (const name in attrs) {
 				const raw = this._getRawAttrDetail(el, name);
 				if (raw && raw.value.includes(marker)) return true;
@@ -1162,23 +1295,14 @@ const ResponseBodyPayloadGenerator = class {
 		return quote === "" ? "unquoted" : "quoted";
 	}
 
+	// True when the marker sits inside a start tag's text (from "<name " to its ">").
 	private _markerInRawAttrFallback(marker: string): boolean {
-		if (!this.body.includes(marker)) return false;
-		const tagRe = /<[a-z][a-z0-9]*\s/gi;
-		let tm;
-		while ((tm = tagRe.exec(this.body)) !== null) {
-			const tagEnd = this.body.indexOf('>', tm.index);
-			if (tagEnd === -1) continue;
-			const tagStr = this.body.substring(tm.index, tagEnd + 1);
-			if (tagStr.includes(marker)) return true;
-		}
-		return false;
+		return ResponseBodyPayloadGenerator._spansContain(this._tagSpans(), this.body, marker);
 	}
 
 	private _markerInCssUrl(marker: string): boolean {
-		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
-		for (const el of allEls) {
-			const attrs: Record<string, string> = (el as any).attributes || {};
+		for (const el of this._select("*") as HTMLElement[]) {
+			const attrs: Record<string, string> = this._attrsOf(el);
 			if (!("style" in attrs)) continue;
 			const raw = this._getRawAttrDetail(el, "style");
 			if (!raw) continue;
@@ -1188,9 +1312,8 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _markerInSrcsetAttr(marker: string): boolean {
-		const allEls = (this.root as any).querySelectorAll("*") as HTMLElement[];
-		for (const el of allEls) {
-			const attrs: Record<string, string> = (el as any).attributes || {};
+		for (const el of this._select("*") as HTMLElement[]) {
+			const attrs: Record<string, string> = this._attrsOf(el);
 			if (!("srcset" in attrs)) continue;
 			const raw = this._getRawAttrDetail(el, "srcset");
 			if (raw && raw.value.includes(marker)) return true;
@@ -1199,8 +1322,7 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _markerInMetaRefresh(marker: string): boolean {
-		const metas = ((this.root as any).querySelectorAll?.("meta") ?? []) as any[];
-		for (const el of metas) {
+		for (const el of this._select("meta")) {
 			const httpEquiv = (el.getAttribute?.("http-equiv") || "").toLowerCase();
 			if (httpEquiv !== "refresh") continue;
 			const raw = this._getRawAttrDetail(el as any, "content");
@@ -1210,8 +1332,7 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _markerInSrcdoc(marker: string, quoted: boolean): boolean {
-		const iframes = ((this.root as any).querySelectorAll?.("iframe") ?? []) as any[];
-		for (const el of iframes) {
+		for (const el of this._select("iframe")) {
 			const raw = this._getRawAttrDetail(el as any, "srcdoc");
 			if (!raw) continue;
 			const isQuoted = raw.quote === '"' || raw.quote === "'";
@@ -1221,8 +1342,7 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _markerInImportMap(marker: string, inquote: boolean): boolean {
-		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
-		for (const el of scripts) {
+		for (const el of this._select("script")) {
 			const type = (el.getAttribute?.("type") || "").toLowerCase();
 			if (type !== "importmap") continue;
 			const src: string = typeof el.rawText === "string"
@@ -1242,8 +1362,7 @@ const ResponseBodyPayloadGenerator = class {
 	}
 
 	private _markerInJsonScriptBlock(marker: string, inquote: boolean): boolean {
-		const scripts = ((this.root as any).querySelectorAll?.("script") ?? []) as any[];
-		for (const el of scripts) {
+		for (const el of this._select("script")) {
 			const type = (el.getAttribute?.("type") || "").toLowerCase();
 			if (!/(?:application|text)\/(?:json|ld\+json)/.test(type)) continue;
 			const src: string = typeof el.rawText === "string"
@@ -1265,7 +1384,7 @@ const ResponseBodyPayloadGenerator = class {
 
 	private _markerInTemplateRaw(marker: string): boolean {
 		if (!this.body.includes(marker)) return false;
-		const bodyLC = this.body.toLowerCase();
+		const bodyLC = this._bodyLower();
 		const open = '<template';
 		const close = '</template>';
 		let pos = 0;
@@ -1308,7 +1427,7 @@ const ResponseBodyPayloadGenerator = class {
 	 *  }
 	 *
 	 * Detection Strategy (ordered for determinism & minimal probe inflation):
-	 *  1. DOM Walk (_walkNodes) – For each node we attempt mutually exclusive specialized handlers:
+	 *  1. DOM Walk (document order) – For each node we attempt mutually exclusive specialized handlers:
 	 *     a. _handleElementStructural: SCRIPT / STYLE / TEMPLATE containers where the reflected value
 	 *        is inside raw text. Determines scripting vs style contexts & whether inside quotes.
 	 *     b. _handleTextNode: Plain text nodes outside script/style map to 'html'. If nested in <template>,
@@ -1367,13 +1486,13 @@ const ResponseBodyPayloadGenerator = class {
 		reflectedValue = decodeURIComponent(reflectedValue);
 		const payloadSet = new Set<string>();
 		const contextSet = new Set<string>();
-		this._walkNodes(this.root as any, (node: any) => {
+		for (const node of this._nodes()) {
 			// Order matters; each helper returns true if it handled the node fully.
-			if (this._handleElementStructural(node, reflectedValue, payloadSet, contextSet, sdk)) return;
-			if (this._handleTextNode(node, reflectedValue, payloadSet, contextSet, sdk)) return;
-			if (this._handleCommentNode(node, reflectedValue, payloadSet, contextSet)) return;
+			if (this._handleElementStructural(node, reflectedValue, payloadSet, contextSet, sdk)) continue;
+			if (this._handleTextNode(node, reflectedValue, payloadSet, contextSet, sdk)) continue;
+			if (this._handleCommentNode(node, reflectedValue, payloadSet, contextSet)) continue;
 			this._handleAttributes(node, reflectedValue, payloadSet, contextSet);
-		});
+		}
 		this._applyHtmlFallbackIfNeeded(reflectedValue, payloadSet, contextSet);
 		payloadSet.add("");
 		sdk.console.log(`[Reflector++] Generated payloads: ${Array.from(payloadSet).join(", ")}`);
@@ -1689,18 +1808,16 @@ const ResponseBodyPayloadGenerator = class {
 		contextSet: Set<string>,
 		sdk: any
 	): boolean {
-		const isTextLike =
-			(node?.nodeType === 3 || node?.constructor?.name === "TextNode") &&
-			typeof node?.text === "string" &&
-			node.text.includes(reflectedValue);
-		if (!isTextLike) return false;
+		const isTextNode = node?.nodeType === 3 || node?.constructor?.name === "TextNode";
+		const text = isTextNode ? this._textOf(node) : undefined;
+		if (typeof text !== "string" || !text.includes(reflectedValue)) return false;
 		const parent = node.parentNode as any;
 		if (parent?.rawTagName) {
 			const tag = parent.rawTagName.toUpperCase();
 			if (tag === "SCRIPT") {
-				return this._handleScriptText(node.text, parent, reflectedValue, payloadSet, contextSet, sdk);
+				return this._handleScriptText(text, parent, reflectedValue, payloadSet, contextSet, sdk);
 			} else if (tag === "STYLE") {
-				return this._handleStyleText(node.text, reflectedValue, payloadSet, contextSet);
+				return this._handleStyleText(text, reflectedValue, payloadSet, contextSet);
 			} else {
 				if (this._hasAncestorTag(parent, "TEMPLATE")) {
 					contextSet.add("templateHtml");
@@ -1738,11 +1855,9 @@ const ResponseBodyPayloadGenerator = class {
 		payloadSet: Set<string>,
 		contextSet: Set<string>
 	): boolean {
-		const isComment =
-			(node?.nodeType === 8 || node?.constructor?.name === "CommentNode") &&
-			typeof node?.text === "string" &&
-			node.text.includes(reflectedValue);
-		if (!isComment) return false;
+		const isCommentNode = node?.nodeType === 8 || node?.constructor?.name === "CommentNode";
+		const text = isCommentNode ? this._textOf(node) : undefined;
+		if (typeof text !== "string" || !text.includes(reflectedValue)) return false;
 		payloadSet.add("<");
 		payloadSet.add(">");
 		payloadSet.add("-");
@@ -1761,7 +1876,7 @@ const ResponseBodyPayloadGenerator = class {
 		const isElement = node?.nodeType === 1 && typeof node?.rawTagName === "string";
 		if (!isElement) return;
 		const el = node as any;
-		const attrs: Record<string, string> = el.attributes || {};
+		const attrs: Record<string, string> = this._attrsOf(el);
 		for (const name in attrs) {
 			const decoded = attrs[name];
 			if (!decoded || !decoded.includes(reflectedValue)) continue;
