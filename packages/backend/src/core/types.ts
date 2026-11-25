@@ -25,6 +25,10 @@ export interface ReflectedParameter {
 
 export interface AnalyzedReflectedParameter extends ReflectedParameter {
   otherContexts?: Record<string, number>;
+  // The reflection is in a standalone JavaScript response, so the browser never parses it
+  // as HTML. Reporting uses this to suggest a JS-only breakout rather than a "</script>"
+  // HTML escape that cannot fire here (scoring already suppresses that critical path).
+  isJsResponse?: boolean;
 }
 
 export interface RequestParameter {
