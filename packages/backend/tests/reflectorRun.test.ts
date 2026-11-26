@@ -63,7 +63,7 @@ beforeEach(() => { (reqParamsStore as any)._store = undefined; });
 describe("run() probe routing", () => {
   test("every probe goes through the limiter (sent with per-probe timeouts)", async () => {
     const sdk = makeSdk();
-    await run({ request: request("route.test", "q=hello"), response: htmlResponse("<p>hello</p>") }, sdk);
+    await run({ request: request("route.test", "q=hello"), response: htmlResponse("<input value=hello>") }, sdk);
     expect(sdk.requests.send.mock.calls.length).toBeGreaterThan(0);
     for (const call of sdk.requests.send.mock.calls) {
       expect(call[1]).toEqual({ timeouts: SEND_TIMEOUTS });
@@ -93,5 +93,45 @@ describe("run() when the target throttles", () => {
     const again = makeSdk();
     await run({ request: req, response: htmlResponse("<p>hello</p>") }, again);
     expect(again.requests.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("run() low-severity findings toggle", () => {
+  // A generic response header with CR/LF stripped: confirmed, but scored low.
+  const headerEcho = (value: string) => ({
+    getCode: () => 200,
+    getBody: () => ({ toText: () => "<p>ok</p>" }),
+    getHeader: (name: string) => (name === "Content-Type" ? ["text/html"] : undefined),
+    getHeaders: () => ({ "Content-Type": ["text/html"], "X-Echo": [value.replace(/[\r\n]/g, "")] }),
+  });
+
+  function headerEchoSdk() {
+    const sdk = makeSdk();
+    sdk.requests.send.mockImplementation(async (spec: any) => {
+      const m = String(spec.getQuery()).match(/q=([^&]*)/);
+      let value = "";
+      try { value = decodeURIComponent(m?.[1] ?? ""); } catch { value = m?.[1] ?? ""; }
+      return { response: headerEcho(value) };
+    });
+    return sdk;
+  }
+
+  afterEach(() => ConfigStore.setLogLowFindings(false));
+
+  test("is off by default: a low-only reflection creates no finding", async () => {
+    expect(ConfigStore.getLogLowFindings()).toBe(false);
+    const sdk = headerEchoSdk();
+    await run({ request: request("low-off.test", "q=hello"), response: headerEcho("hello") }, sdk);
+    expect(sdk.requests.send).toHaveBeenCalled();
+    expect(sdk.findings.create).not.toHaveBeenCalled();
+  });
+
+  test("when enabled, the low reflection is reported", async () => {
+    ConfigStore.setLogLowFindings(true);
+    const sdk = headerEchoSdk();
+    await run({ request: request("low-on.test", "q=hello"), response: headerEcho("hello") }, sdk);
+    expect(sdk.findings.create).toHaveBeenCalledTimes(1);
+    const finding = (sdk.findings.create.mock.calls[0] as unknown[])[0] as { description: string };
+    expect(finding.description).toMatch(/"severity":\s*"low"/);
   });
 });

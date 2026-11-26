@@ -113,7 +113,10 @@ export async function run(
     }
     const [headerReflections, bodyReflections] = results;
 
-    const reflectedParameters = [...headerReflections, ...bodyReflections];
+    const allReflections = [...headerReflections, ...bodyReflections];
+    const reflectedParameters = ConfigStore.getLogLowFindings()
+        ? allReflections
+        : allReflections.filter((p) => p.severity !== "low");
 
     const encodedSignals = getEncodedSignals(input);
 

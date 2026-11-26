@@ -4,6 +4,7 @@ import { FrontendSDK } from "@/types";
 const ENABLED_STORAGE_KEY = "enabled"
 const PROBE_OOS_STORAGE_KEY = "probeOutOfScope"
 const LOG_UNCONFIRMED_FINDINGS_STORAGE_KEY = "logUnconfirmedFindings"
+const LOG_LOW_FINDINGS_STORAGE_KEY = "logLowFindings"
 const CHECK_HEADER_REFLECTIONS_STORAGE_KEY = "checkResponseHeaderReflections"
 const CHECK_JS_RESPONSE_REFLECTIONS_STORAGE_KEY = "checkJsResponseReflections"
 const CONTENT_TYPES_STORAGE_KEY = "noSniffContentTypes"
@@ -89,6 +90,15 @@ export class PluginSettings {
     public async setLogUnconfirmedFindings(value: boolean): Promise<void> {
         await this.sdk.backend.setLogUnconfirmedFindings(value);
         return this.set<boolean>(LOG_UNCONFIRMED_FINDINGS_STORAGE_KEY, value);
+    }
+
+    public getLogLowFindings(): boolean {
+        return this.get<boolean>(LOG_LOW_FINDINGS_STORAGE_KEY, false);
+    }
+
+    public async setLogLowFindings(value: boolean): Promise<void> {
+        await this.sdk.backend.setLogLowFindings(value);
+        return this.set<boolean>(LOG_LOW_FINDINGS_STORAGE_KEY, value);
     }
 
     public getDefaultNoSniffContentTypes(): Set<string> {

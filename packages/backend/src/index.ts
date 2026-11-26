@@ -10,6 +10,7 @@ export type API = DefineAPI<{
     setCheckResponseHeaderReflections: (sdk: SDK, value: boolean) => Promise<void>;
     setCheckJsResponseReflections: (sdk: SDK, value: boolean) => Promise<void>;
     setLogUnconfirmedFindings: (sdk: SDK, value: boolean) => Promise<void>;
+    setLogLowFindings: (sdk: SDK, value: boolean) => Promise<void>;
     setNoSniffContentTypes: (sdk: SDK, value: string) => Promise<void>;
     setPathBlocklist: (sdk: SDK, value: string) => Promise<void>;
     setProbeConcurrency: (sdk: SDK, value: number) => Promise<void>;
@@ -37,6 +38,9 @@ export function init(sdk: SDK<API>) {
     })
     sdk.api.register("setLogUnconfirmedFindings", async (_sdk, value: boolean) => {
         ConfigStore.setLogUnconfirmedFindings(value)
+    })
+    sdk.api.register("setLogLowFindings", async (_sdk, value: boolean) => {
+        ConfigStore.setLogLowFindings(value)
     })
     sdk.api.register("setPathBlocklist", async (_sdk, value: string) => {
         const parsed = JSON.parse(value);

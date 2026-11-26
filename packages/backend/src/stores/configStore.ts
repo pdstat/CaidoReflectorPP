@@ -10,6 +10,8 @@ export class ConfigStore {
 
     private _logUnconfirmedFindings = false;
 
+    private _logLowFindings = false;
+
     private _checkResponseHeaderReflections = true;
 
     private _checkRequestHeaderReflections = true;
@@ -80,6 +82,14 @@ export class ConfigStore {
 
     static setLogUnconfirmedFindings(value: boolean) {
         ConfigStore.instance._logUnconfirmedFindings = value;
+    }
+
+    static getLogLowFindings(): boolean {
+        return ConfigStore.instance._logLowFindings;
+    }
+
+    static setLogLowFindings(value: boolean) {
+        ConfigStore.instance._logLowFindings = value;
     }
 
     static getNoSniffContentTypes(): Set<string> {

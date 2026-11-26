@@ -13,6 +13,7 @@ const probeOutOfScope = ref(false)
 const checkResponseHeaderReflections = ref(true)
 const checkJsResponseReflections = ref(true)
 const logUnconfirmedFindings = ref(false)
+const logLowFindings = ref(false)
 const noSniffContentTypes = ref<string>("")
 const pathBlocklist = ref<string>("")
 const probeConcurrency = ref<number>(DEFAULT_PROBE_CONCURRENCY)
@@ -72,6 +73,7 @@ onMounted(async () => {
     checkResponseHeaderReflections.value = settings.getCheckResponseHeaderReflections() === true
     checkJsResponseReflections.value = settings.getCheckJsResponseReflections() === true
     logUnconfirmedFindings.value = settings.getLogUnconfirmedFindings() === true
+    logLowFindings.value = settings.getLogLowFindings() === true
     noSniffContentTypes.value = Array.from(settings.getNoSniffContentTypes()).sort().join("\n")
     pathBlocklist.value = settings.getPathBlocklist().join("\n")
     probeConcurrency.value = settings.getProbeConcurrency()
@@ -82,6 +84,7 @@ onMounted(async () => {
     settings.setCheckResponseHeaderReflections(checkResponseHeaderReflections.value)
     settings.setCheckJsResponseReflections(checkJsResponseReflections.value)
     settings.setLogUnconfirmedFindings(logUnconfirmedFindings.value)
+    settings.setLogLowFindings(logLowFindings.value)
     settings.setProbeOutOfScope(probeOutOfScope.value)
     settings.setNoSniffContentTypes(settings.getNoSniffContentTypes())
     settings.setPathBlocklist(settings.getPathBlocklist())
@@ -140,6 +143,12 @@ watch(logUnconfirmedFindings, async (v) => {
     }
 })
 
+watch(logLowFindings, async (v) => {
+    if (loaded.value) {
+        await settings.setLogLowFindings(v)
+    }
+})
+
 </script>
 
 <template>
@@ -192,6 +201,10 @@ watch(logUnconfirmedFindings, async (v) => {
                             <div class="flex items-center gap-2">
                                 <ToggleSwitch v-model="logUnconfirmedFindings" :disabled="!loaded" />
                                 <label class="text-sm cursor-pointer select-none">Log unconfirmed (encoded) findings</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <ToggleSwitch v-model="logLowFindings" :disabled="!loaded" />
+                                <label class="text-sm cursor-pointer select-none">Log low severity findings</label>
                             </div>
                         </div>
 
